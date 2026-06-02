@@ -2,7 +2,7 @@ import type { FlowDefinition } from '../types.js'
 
 export const openPaymentsExampleFlow: FlowDefinition = {
   id: 'open-payments-example',
-  title: 'Open Payments (example.js)',
+  title: 'One Time P2P Payment',
   description: 'Discovery → grants → quote → interactive outgoing payment',
   nodes: [
     {
