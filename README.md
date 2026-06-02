@@ -5,6 +5,8 @@ Watch a payment move through wallet-address discovery, **GNAP** grants, quotes, 
 consent, and the final outgoing payment — step by step, with a live graph, a timeline, and
 plain-language narration of what each component does.
 
+![Screenshot: the web UI showing a flow in progress, with the graph, timeline, narration, and event log visible.](./viz_screenshot.png)
+
 You can explore it two ways:
 
 - **Mocked** — a scripted run with no setup. Best for first exposure to the concepts.
