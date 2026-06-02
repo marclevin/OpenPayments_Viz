@@ -1,0 +1,10 @@
+*.key
+*_ID.txt
+*.log
+
+.env
+*.pem
+
+
+node_modules/
+dist/

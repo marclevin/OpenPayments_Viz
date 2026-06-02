@@ -1,0 +1,20 @@
+{
+  "name": "openpayments-viz",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @opviz/web",
+    "dev:web": "npm run dev -w @opviz/web",
+    "dev:runner": "npm run dev -w @opviz/runner",
+    "dev:all": "concurrently -n runner,web -c cyan,magenta \"npm run dev -w @opviz/runner\" \"npm run dev -w @opviz/web\"",
+    "build": "npm run build -w @opviz/runner && npm run build -w @opviz/web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.1",
+    "typescript": "^5.6.0"
+  }
+}

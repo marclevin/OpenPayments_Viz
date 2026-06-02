@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:5179/src/main.tsx -o /dev/null -w \"main.tsx: %{http_code}\\\\n\")",
+      "Bash(curl -s \"http://localhost:5179/src/components/FlowNode.tsx\" -o /dev/null -w \"FlowNode.tsx: %{http_code}\\\\n\")",
+      "Bash(curl -s \"http://localhost:5179/@fs/c:/Users/marcl/OneDrive/Desktop/Code/OpenPayments_Viz/apps/web/src/App.tsx\" -o /dev/null -w \"probe done\\\\n\")",
+      "Bash(kill %1)",
+      "Bash(pkill -f \"vite --port 5179\")",
+      "Bash(node -e \"console.log\\('node', process.version\\)\")",
+      "Bash(xargs grep -l \"validateResponses\\\\|CreateAuthenticatedClientArgs\\\\|createAuthenticatedClient\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@interledger/open-payments/package.json'\\).version\\)\")",
+      "Bash(timeout 25 npm view @interledger/open-payments version dist-tags)",
+      "Bash(pkill -f \"tsx watch\")",
+      "Bash(pkill -f \"dev:runner\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@interledger/openapi/package.json'\\).version\\)\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Write-Output \"killing PID $\\($_.OwningProcess\\)\"; Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1; \\(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | Measure-Object\\).Count)",
+      "Bash(ls -la node_modules/@opviz/)",
+      "Bash(grep -n \"defaultScenarioId\" node_modules/@opviz/shared/src/scenarios/index.ts)",
+      "Bash(ls node_modules/.vite)"
+    ]
+  }
+}

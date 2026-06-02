@@ -1,0 +1,818 @@
+:root {
+  color-scheme: light;
+  /* Core neutrals */
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --panel2: #fbfcff;
+  --text: #0b1220;
+  --muted: #4b5568;
+  --border: rgba(15, 23, 42, 0.14);
+  --shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+  --radius: 14px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+
+  /* UCT-ish base (tunable) */
+  --uctBlue: #003b5c;
+  --uctGold: #ffb81c;
+
+  /* Semantic statuses */
+  --statusOk: #1f9d55;
+  --statusActive: #b7791f;
+  --statusError: #d64545;
+
+  /* Accents */
+  --accent: var(--uctBlue);
+  --accentSoft: rgba(0, 59, 92, 0.12);
+  --goldSoft: rgba(255, 184, 28, 0.24);
+
+  /* Entity colors (default map; UI will apply by variable) */
+  --entityClient: #0b6bcb;
+  --entitySenderWallet: #ffb81c;
+  --entityReceiverWallet: #00a3a3;
+  --entityAuthServer: #7c3aed;
+  --entityResourceServer: #2563eb;
+  --entityPayment: #16a34a;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+    "Segoe UI Emoji";
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--accent);
+}
+
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.topbar .left,
+.topbar .right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scenarioPicker {
+  gap: 2px;
+}
+.scenarioPicker label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.scenarioPicker select {
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  font-weight: 650;
+  outline: none;
+}
+
+.btnRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel2);
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.dot.ok {
+  background: var(--statusOk);
+}
+.dot.bad {
+  background: var(--statusError);
+}
+
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.05s ease;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btnIcon {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.95;
+}
+
+/* Primary action — solid UCT blue. */
+.btn.primary {
+  background: var(--uctBlue);
+  border-color: var(--uctBlue);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(0, 59, 92, 0.28);
+}
+.btn.primary:hover {
+  background: #024d77;
+  box-shadow: 0 8px 20px rgba(0, 59, 92, 0.34);
+}
+
+/* Secondary — ghost, fills on hover. */
+.btn.secondary {
+  background: rgba(255, 255, 255, 0.6);
+  color: rgba(11, 18, 32, 0.85);
+}
+.btn.secondary:hover:not(:disabled) {
+  background: var(--accentSoft);
+  border-color: rgba(0, 59, 92, 0.3);
+  color: var(--uctBlue);
+}
+
+/* Gold — active "paused" state. */
+.btn.gold {
+  background: var(--uctGold);
+  border-color: var(--uctGold);
+  color: #3a2b00;
+  box-shadow: 0 6px 16px rgba(255, 184, 28, 0.32);
+}
+.btn.gold:hover {
+  background: #ffc445;
+}
+.btn.danger {
+  background: linear-gradient(180deg, rgba(214, 69, 69, 0.16), rgba(214, 69, 69, 0.06));
+}
+
+/* Speed preset toggle group. */
+.speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.speedLabel {
+  font-size: 12px;
+  color: var(--muted);
+}
+.speedPresets {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  gap: 2px;
+}
+.speedPreset {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.speedPreset:hover {
+  color: var(--uctBlue);
+}
+.speedPreset.active {
+  background: var(--uctBlue);
+  color: #fff;
+}
+
+.layout {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 280px 1fr 360px;
+  gap: 12px;
+  padding: 12px;
+  transition: grid-template-columns 220ms ease;
+}
+.layout.timeline-collapsed {
+  grid-template-columns: 44px 1fr 360px;
+}
+.layout.narration-collapsed {
+  grid-template-columns: 280px 1fr 44px;
+}
+.layout.timeline-collapsed.narration-collapsed {
+  grid-template-columns: 44px 1fr 44px;
+}
+
+/* Collapsed panel reduces to a thin vertical rail with a single Show toggle. */
+.collapsedRail {
+  align-items: stretch;
+}
+.railToggle {
+  appearance: none;
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: var(--panel2);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+.railToggle:hover {
+  background: var(--accentSoft);
+  color: var(--uctBlue);
+}
+.railLabel {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.railShow {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--uctBlue);
+}
+
+.centerCol {
+  display: grid;
+  grid-template-rows: minmax(120px, 1fr) 10px 280px;
+  min-width: 0;
+  min-height: 0;
+}
+.centerCol > .panel {
+  min-height: 0;
+}
+
+/* Draggable splitter between the graph and the Scenario Controls panel. */
+.rowResizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: row-resize;
+  touch-action: none;
+}
+.rowResizerGrip {
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 120ms ease, width 120ms ease;
+}
+.rowResizer:hover .rowResizerGrip {
+  background: rgba(0, 59, 92, 0.45);
+  width: 72px;
+}
+
+.configForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.configCard {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+.configCardHeader {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: rgba(0, 59, 92, 0.04);
+  cursor: pointer;
+  text-align: left;
+}
+.configCard.open .configCardHeader {
+  border-bottom: 1px solid var(--border);
+}
+.configCardChevron {
+  color: rgba(75, 85, 104, 0.9);
+  font-size: 12px;
+  width: 12px;
+}
+.configCardTitle {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.configCardHint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.configCardBody {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scenarioRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.scenarioRow select {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  outline: none;
+}
+.scenarioActions {
+  flex-wrap: wrap;
+}
+.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(11, 18, 32, 0.78);
+}
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: rgba(0, 59, 92, 0.04);
+  color: rgba(11, 18, 32, 0.88);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 12px;
+}
+.tab.active {
+  background: var(--accentSoft);
+  border-color: rgba(0, 59, 92, 0.28);
+  color: var(--uctBlue);
+}
+.subtleHelp {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.timelineGroup {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(167, 180, 207, 0.75);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelHeader {
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel2);
+}
+.panelHeader h2 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.panelBody {
+  padding: 12px;
+  overflow: auto;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.step {
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 59, 92, 0.04);
+  cursor: pointer;
+}
+.step:hover {
+  border-color: rgba(0, 59, 92, 0.28);
+}
+.step.selected {
+  outline: 2px solid rgba(0, 59, 92, 0.25);
+}
+.step .title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.75);
+}
+.pill.ok {
+  color: var(--statusOk);
+  border-color: rgba(31, 157, 85, 0.35);
+}
+.pill.err {
+  color: var(--statusError);
+  border-color: rgba(214, 69, 69, 0.35);
+}
+.pill.act {
+  color: var(--statusActive);
+  border-color: rgba(183, 121, 31, 0.35);
+}
+.step .desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.narration {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.narrHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.narrTitle {
+  font-weight: 750;
+  font-size: 14px;
+}
+.narrBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.7);
+}
+.narrBody {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.narrBody p {
+  margin: 0;
+}
+.narrSection {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.narrLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(75, 85, 104, 0.85);
+}
+
+.kw {
+  font-weight: 700;
+  padding: 0 0.15em;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+}
+.hint {
+  margin-top: 4px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 184, 28, 0.55);
+  background: rgba(255, 184, 28, 0.12);
+  color: rgba(11, 18, 32, 0.95);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.hint.ok {
+  border-color: rgba(31, 157, 85, 0.55);
+  background: rgba(31, 157, 85, 0.12);
+}
+
+.consentReturn {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.consentCard {
+  max-width: 440px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.consentCheck {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--statusOk);
+  background: rgba(31, 157, 85, 0.14);
+  border: 2px solid rgba(31, 157, 85, 0.45);
+}
+.consentCard h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.consentCard p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 13.5px;
+}
+.consentCard .btn {
+  margin-top: 6px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 0;
+}
+
+details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+details > summary {
+  cursor: pointer;
+  padding: 10px 10px;
+  list-style: none;
+  user-select: none;
+  font-weight: 650;
+  font-size: 12px;
+  color: rgba(11, 18, 32, 0.92);
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: rgba(75, 85, 104, 0.90);
+  transform: translateY(-1px);
+}
+details[open] > summary::before {
+  content: '▾';
+}
+.detailsBody {
+  padding: 10px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.field input,
+.field select,
+.field textarea {
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.90);
+  color: var(--text);
+  outline: none;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: rgba(0, 59, 92, 0.45);
+}
+
+pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.flowWrap {
+  height: 100%;
+}
+
+/* --- Graph "pop": per-status node emphasis + animated active edges --- */
+.flowNodeCard {
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.1);
+}
+@keyframes opPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(183, 121, 31, 0), 0 12px 26px rgba(15, 23, 42, 0.1);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 5px rgba(183, 121, 31, 0.22), 0 14px 32px rgba(15, 23, 42, 0.2);
+  }
+}
+@keyframes opSettle {
+  from {
+    transform: scale(1.05);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.flowNodeCard.status-active {
+  animation: opPulse 1.4s ease-in-out infinite;
+}
+.flowNodeCard.status-success {
+  animation: opSettle 0.45s ease-out 1;
+  box-shadow: 0 0 0 2px rgba(31, 157, 85, 0.3), 0 12px 26px rgba(15, 23, 42, 0.12);
+}
+.flowNodeCard.status-error {
+  box-shadow: 0 0 0 3px rgba(214, 69, 69, 0.35), 0 12px 26px rgba(15, 23, 42, 0.14);
+}
+/* Selected/focused wins over status styling. */
+.flowNodeCard.is-selected {
+  box-shadow: 0 0 0 2px var(--entityColor, var(--accent)), 0 14px 30px rgba(15, 23, 42, 0.2);
+}
+
+@keyframes opDash {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+.react-flow__edge.edge-flow-active .react-flow__edge-path {
+  stroke-dasharray: 6 6;
+  animation: opDash 0.6s linear infinite;
+}
+
+.inspectorList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.eventRow {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+}
+.eventRow summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px;
+  cursor: pointer;
+}
+.eventMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.eventTag {
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(0, 59, 92, 0.06);
+  color: rgba(11, 18, 32, 0.85);
+  white-space: nowrap;
+}
+.eventTitle {
+  font-weight: 650;
+  font-size: 12px;
+  color: rgba(11, 18, 32, 0.92);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eventTime {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(75, 85, 104, 0.9);
+  white-space: nowrap;
+}
+.eventBody {
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 59, 92, 0.02);
+}
+
+.react-flow__attribution {
+  background: transparent !important;
+  color: rgba(167, 180, 207, 0.7) !important;
+}
+

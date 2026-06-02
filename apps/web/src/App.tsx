@@ -1,0 +1,1223 @@
+import { defaultScenarioId, getScenarioById, scenarios } from '@opviz/shared/scenarios'
+import type { FlowEdge, FlowNode as FlowNodeT, FlowStep, RunnerEvent, StepStatus } from '@opviz/shared'
+import { getStepStatusFromEvents } from '@opviz/shared'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactFlow, { Background, MarkerType, ReactFlowProvider, useReactFlow } from 'reactflow'
+import { FlowNode } from './components/FlowNode'
+import { getEntityColorVar, highlightEntities } from './lib/colorMap'
+import { createRunnerClient, type RunnerConfig } from './lib/eventStream'
+import { type ExplainSegment, explainEdge, explainNode, explainStep, nodeStatus } from './lib/explain'
+import { makeMockConsentCompletionEvents, makeMockRunEvents } from './lib/mockRun'
+
+type TransportMode = 'mock' | 'sse' | 'ws'
+type BottomTab = 'inspector' | 'setup'
+type Selection = { kind: 'node' | 'edge' | 'step'; id: string } | null
+
+const nodeTypes = { flowNode: FlowNode }
+
+function normalizeWalletAddressInput(raw: string): string {
+  const v = raw.trim()
+  if (!v) return ''
+
+  // Payment pointers: $example.com/alice -> https://example.com/alice
+  if (v.startsWith('$')) return `https://${v.slice(1)}`
+
+  return v
+}
+
+function pillClass(status: StepStatus) {
+  if (status === 'success') return 'pill ok'
+  if (status === 'error') return 'pill err'
+  if (status === 'active') return 'pill act'
+  return 'pill'
+}
+
+function prettyJson(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function formatTime(ts: string | undefined): string {
+  if (!ts) return ''
+  try {
+    const d = new Date(ts)
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch {
+    return ts
+  }
+}
+
+function eventVarName(e: RunnerEvent): string {
+  if (e.type.startsWith('walletAddress.')) return '--entitySenderWallet'
+  if (e.type.startsWith('grant.')) return '--entityAuthServer'
+  if (e.type.includes('Payment') || e.type.includes('quote')) return '--entityPayment'
+  if (e.type.startsWith('runner.')) return '--accent'
+  return '--accent'
+}
+
+function NarrationParagraph({ text }: { text: string }) {
+  const parts = useMemo(() => highlightEntities(text), [text])
+  return (
+    <p>
+      {parts.map((p, idx) =>
+        typeof p === 'string' ? (
+          <span key={idx}>{p}</span>
+        ) : (
+          <span key={idx} className="kw" style={{ color: `var(${p.varName})` }}>
+            {p.t}
+          </span>
+        )
+      )}
+    </p>
+  )
+}
+
+function CollapsibleCard({
+  title,
+  hint,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string
+  hint?: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`configCard ${open ? 'open' : ''}`}>
+      <button type="button" className="configCardHeader" onClick={onToggle} aria-expanded={open}>
+        <span className="configCardChevron">{open ? '▾' : '▸'}</span>
+        <span className="configCardTitle">{title}</span>
+        {hint ? <span className="configCardHint">{hint}</span> : null}
+      </button>
+      {open ? <div className="configCardBody">{children}</div> : null}
+    </div>
+  )
+}
+
+// Light-touch helper: shows the normalized URL when the input is a payment pointer
+// (or otherwise differs after normalization). No blocking validation.
+function AddressPreview({ value }: { value: string }) {
+  const normalized = normalizeWalletAddressInput(value)
+  if (!value.trim() || normalized === value.trim()) return null
+  return (
+    <div className="subtleHelp">
+      <span className="mono">{value.trim()}</span> → <span className="mono">{normalized}</span>
+    </div>
+  )
+}
+
+type Focus =
+  | { kind: 'step'; step: FlowStep }
+  | { kind: 'node'; node: FlowNodeT }
+  | { kind: 'edge'; edge: FlowEdge }
+  | null
+
+function focusKey(focus: Focus): string {
+  if (!focus) return ''
+  if (focus.kind === 'step') return `step:${focus.step.id}`
+  if (focus.kind === 'node') return `node:${focus.node.id}`
+  return `edge:${focus.edge.id}`
+}
+
+function focusNodeTargets(focus: Focus): string[] {
+  if (!focus) return []
+  if (focus.kind === 'step') return focus.step.involvedNodeIds
+  if (focus.kind === 'node') return [focus.node.id]
+  return [focus.edge.source, focus.edge.target]
+}
+
+function useAutoFitOnFocus(focus: Focus) {
+  const rf = useReactFlow()
+  const key = focusKey(focus)
+  useEffect(() => {
+    const ids = focusNodeTargets(focus)
+    if (ids.length === 0) return
+    const nodes = rf.getNodes().filter((n) => ids.includes(String(n.id)))
+    if (!nodes.length) return
+    rf.fitView({ nodes, padding: 0.35, duration: 420 })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+}
+
+function AppInner() {
+  const [transport, setTransport] = useState<TransportMode>('mock')
+  const [baseUrl, setBaseUrl] = useState('http://localhost:3344')
+  // The selected scenario drives both the visual graph and the runner config.
+  const [scenarioId, setScenarioId] = useState<string>(defaultScenarioId)
+  const flow = useMemo(() => getScenarioById(scenarioId) ?? scenarios[0]!, [scenarioId])
+  const [keyId, setKeyId] = useState('')
+  const [privateKeyPath, setPrivateKeyPath] = useState('')
+  const [privateKeyHint, setPrivateKeyHint] = useState('')
+  const [clientWalletAddressUrl, setClientWalletAddressUrl] = useState('')
+  const [sendingWalletAddressUrl, setSendingWalletAddressUrl] = useState('')
+  const [receivingWalletAddressUrl, setReceivingWalletAddressUrl] = useState('')
+  const [callbackPort, setCallbackPort] = useState<number>(3999)
+  const [uiBaseUrl, setUiBaseUrl] = useState('http://localhost:5173/')
+
+  type SavedScenario = {
+    id: string
+    name: string
+    keyId: string
+    clientWalletAddressUrl: string
+    sendingWalletAddressUrl: string
+    receivingWalletAddressUrl: string
+    callbackPort: number
+    baseUrl: string
+    uiBaseUrl: string
+    privateKeyHint?: string
+    updatedAt: string
+  }
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([])
+  const [selectedScenario, setSelectedScenario] = useState<string>('')
+  const [scenarioName, setScenarioName] = useState<string>('')
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false)
+  const [narrationCollapsed, setNarrationCollapsed] = useState(false)
+
+  // Scenario Controls panel sizing (draggable splitter + maximize toggle).
+  const [controlsHeight, setControlsHeight] = useState<number>(280)
+  const [controlsMaximized, setControlsMaximized] = useState(false)
+  const centerColRef = useRef<HTMLDivElement | null>(null)
+  const restoreHeightRef = useRef<number>(280)
+
+  // Collapsible config sections (all open by default).
+  const [openSections, setOpenSections] = useState({ scenario: true, credentials: true, addresses: true })
+
+  const [events, setEvents] = useState<RunnerEvent[]>([])
+  // `selectedStepId` drives ONLY the timeline row highlight + consent logic.
+  const [selectedStepId, setSelectedStepId] = useState<string>(flow.steps[0]?.id ?? '')
+  // `selection` is the unified thing being explained + focused in the graph (node | edge | step).
+  const [selection, setSelection] = useState<Selection>({ kind: 'step', id: flow.steps[0]?.id ?? '' })
+  const [isPaused, setIsPaused] = useState(false)
+  const [speed, setSpeed] = useState(1.0)
+  const [connected, setConnected] = useState<'disconnected' | 'connected'>('disconnected')
+  const [bottomTab, setBottomTab] = useState<BottomTab>('inspector')
+  const [consentAck, setConsentAck] = useState(false)
+
+  const lastRedirectUrl = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i]!
+      if (e.type === 'grant.interactive_required') return e.redirectUrl
+    }
+    return undefined
+  }, [events])
+
+  const consentState = useMemo(() => {
+    // Consider consent "needed" if we have an interactive-required event without a later grant.continued.
+    let lastInteractiveIdx = -1
+    let continuedAfterInteractive = false
+    for (let i = 0; i < events.length; i++) {
+      const e = events[i]!
+      if (e.type === 'grant.interactive_required') {
+        lastInteractiveIdx = i
+        continuedAfterInteractive = false
+      }
+      if (lastInteractiveIdx >= 0 && i > lastInteractiveIdx && e.type === 'grant.continued') {
+        continuedAfterInteractive = true
+      }
+    }
+    const needsConsent = lastInteractiveIdx >= 0 && !continuedAfterInteractive
+    return { needsConsent, hasInteractive: lastInteractiveIdx >= 0 }
+  }, [events])
+
+  const statusesByStepId = useMemo(() => {
+    const map: Record<string, StepStatus> = {}
+    for (const step of flow.steps) {
+      map[step.id] = getStepStatusFromEvents(step.id, events)
+    }
+    return map
+  }, [events, flow.steps])
+
+  // Resolve the unified `selection` to the concrete node/edge/step it points at.
+  const focus = useMemo<Focus>(() => {
+    if (!selection) return null
+    if (selection.kind === 'step') {
+      const step = flow.steps.find((s) => s.id === selection.id)
+      return step ? { kind: 'step', step } : null
+    }
+    if (selection.kind === 'node') {
+      const node = flow.nodes.find((n) => n.id === selection.id)
+      return node ? { kind: 'node', node } : null
+    }
+    const edge = flow.edges.find((e) => e.id === selection.id)
+    return edge ? { kind: 'edge', edge } : null
+  }, [selection, flow.nodes, flow.edges, flow.steps])
+
+  const narration = useMemo<ExplainSegment[]>(() => {
+    if (!focus) return [{ label: '', body: 'Select a component, an arrow, or a timeline step to see what it does.' }]
+    if (focus.kind === 'node') {
+      // A component is explained relative to the step currently selected in the timeline.
+      const timelineStep = flow.steps.find((s) => s.id === selectedStepId)
+      return explainNode(focus.node, timelineStep, nodeStatus(focus.node.id, statusesByStepId, flow))
+    }
+    if (focus.kind === 'edge') {
+      const st = focus.edge.stepId ? statusesByStepId[focus.edge.stepId] : undefined
+      return explainEdge(focus.edge, st)
+    }
+    return explainStep(focus.step, statusesByStepId[focus.step.id], consentState.needsConsent)
+  }, [focus, selectedStepId, statusesByStepId, consentState.needsConsent, flow])
+
+  // Header title + type badge + accent color for the narration panel, derived from `focus`.
+  const focusHeader = useMemo(() => {
+    if (!focus) return { title: '—', badge: '', colorVar: '--accent' as string }
+    if (focus.kind === 'node') {
+      return { title: focus.node.label, badge: 'Component', colorVar: getEntityColorVar(focus.node.label, focus.node.kind) as string }
+    }
+    if (focus.kind === 'edge') {
+      const sourceNode = flow.nodes.find((n) => n.id === focus.edge.source)
+      return {
+        title: focus.edge.label ?? 'Relationship',
+        badge: focus.edge.kind === 'relation' ? 'Relationship' : 'Request',
+        colorVar: (sourceNode ? getEntityColorVar(sourceNode.label, sourceNode.kind) : '--accent') as string,
+      }
+    }
+    return { title: focus.step.title, badge: 'Step', colorVar: '--accent' as string }
+  }, [focus, flow.nodes])
+
+  const clientRef = useRef<ReturnType<typeof createRunnerClient> | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const didMountScenarioRef = useRef(false)
+
+  // Mock playback driver: refs so the running loop always reads the latest pause/speed
+  // (avoids the stale-closure bug where pausing/speed changes were ignored mid-run).
+  const isPausedRef = useRef(false)
+  const speedRef = useRef(1)
+  const playbackRef = useRef<{ queue: RunnerEvent[]; i: number } | null>(null)
+  const appendEventRef = useRef<(e: RunnerEvent) => void>(() => {})
+
+  const pumpPlayback = useCallback(() => {
+    const pb = playbackRef.current
+    if (!pb || isPausedRef.current) return
+    if (pb.i >= pb.queue.length) {
+      playbackRef.current = null
+      return
+    }
+    appendEventRef.current(pb.queue[pb.i]!)
+    pb.i += 1
+    timerRef.current = window.setTimeout(pumpPlayback, Math.max(80, 600 / speedRef.current))
+  }, [])
+
+  // Switching scenarios starts clean: clear events, reset selection to the first step,
+  // and drop any live runner connection so state can't bleed across scenarios.
+  useEffect(() => {
+    if (!didMountScenarioRef.current) {
+      didMountScenarioRef.current = true
+      return
+    }
+    clearTimer()
+    playbackRef.current = null
+    setEvents([])
+    setIsPaused(false)
+    isPausedRef.current = false
+    const first = flow.steps[0]?.id ?? ''
+    setSelectedStepId(first)
+    setSelection(first ? { kind: 'step', id: first } : null)
+    if (transport !== 'mock') disconnectFromRunner()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioId])
+
+  // Mirror state into refs the playback loop reads.
+  useEffect(() => {
+    appendEventRef.current = appendEvent
+  })
+  useEffect(() => {
+    isPausedRef.current = isPaused
+  }, [isPaused])
+  useEffect(() => {
+    speedRef.current = speed
+  }, [speed])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('opviz.scenarios.v1')
+      if (raw) {
+        const parsed = JSON.parse(raw) as SavedScenario[]
+        if (Array.isArray(parsed)) setSavedScenarios(parsed)
+      }
+      const h = Number(localStorage.getItem('opviz.controlsHeight.v1'))
+      if (Number.isFinite(h) && h >= 160) setControlsHeight(h)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  function persistScenarios(next: SavedScenario[]) {
+    setSavedScenarios(next)
+    try {
+      localStorage.setItem('opviz.scenarios.v1', JSON.stringify(next))
+    } catch {
+      // ignore
+    }
+  }
+
+  function applyScenario(s: SavedScenario) {
+    setScenarioName(s.name)
+    setKeyId(s.keyId)
+    setClientWalletAddressUrl(s.clientWalletAddressUrl)
+    setSendingWalletAddressUrl(s.sendingWalletAddressUrl)
+    setReceivingWalletAddressUrl(s.receivingWalletAddressUrl)
+    setCallbackPort(s.callbackPort)
+    setBaseUrl(s.baseUrl)
+    setUiBaseUrl(s.uiBaseUrl)
+    setPrivateKeyHint(s.privateKeyHint ?? '')
+  }
+
+  function buildScenario(id: string, name: string): SavedScenario {
+    return {
+      id,
+      name,
+      keyId,
+      clientWalletAddressUrl,
+      sendingWalletAddressUrl,
+      receivingWalletAddressUrl,
+      callbackPort,
+      baseUrl,
+      uiBaseUrl,
+      privateKeyHint: privateKeyHint || undefined,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  function fallbackName() {
+    return scenarioName.trim() || sendingWalletAddressUrl.trim() || 'Untitled scenario'
+  }
+
+  // Save: update the active scenario if one is selected, otherwise create a new one.
+  function saveScenario() {
+    const id = selectedScenario || crypto.randomUUID()
+    const next = [buildScenario(id, fallbackName()), ...savedScenarios.filter((x) => x.id !== id)].slice(0, 20)
+    persistScenarios(next)
+    setSelectedScenario(id)
+  }
+
+  // Save as new: always create a fresh entry, leaving the original untouched.
+  function saveScenarioAsNew() {
+    const id = crypto.randomUUID()
+    const next = [buildScenario(id, fallbackName()), ...savedScenarios].slice(0, 20)
+    persistScenarios(next)
+    setSelectedScenario(id)
+  }
+
+  function duplicateScenario() {
+    const source = savedScenarios.find((x) => x.id === selectedScenario)
+    if (!source) return
+    const id = crypto.randomUUID()
+    const copy: SavedScenario = { ...source, id, name: `${source.name} (copy)`, updatedAt: new Date().toISOString() }
+    persistScenarios([copy, ...savedScenarios].slice(0, 20))
+    setSelectedScenario(id)
+    setScenarioName(copy.name)
+  }
+
+  function deleteScenario() {
+    if (!selectedScenario) return
+    const target = savedScenarios.find((x) => x.id === selectedScenario)
+    if (!window.confirm(`Delete scenario "${target?.name ?? 'Untitled'}"? This cannot be undone.`)) return
+    persistScenarios(savedScenarios.filter((x) => x.id !== selectedScenario))
+    setSelectedScenario('')
+  }
+
+  // --- Scenario Controls resize (draggable splitter + maximize) ---
+  function commitControlsHeight(h: number) {
+    setControlsHeight(h)
+    try {
+      localStorage.setItem('opviz.controlsHeight.v1', String(Math.round(h)))
+    } catch {
+      // ignore
+    }
+  }
+
+  function startControlsResize(e: React.MouseEvent) {
+    e.preventDefault()
+    setControlsMaximized(false)
+    const container = centerColRef.current
+    const onMove = (ev: MouseEvent) => {
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const max = rect.height - 160
+      const next = Math.min(Math.max(rect.bottom - ev.clientY, 160), Math.max(max, 160))
+      setControlsHeight(next)
+    }
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      const rect = container?.getBoundingClientRect()
+      if (rect) {
+        const max = rect.height - 160
+        commitControlsHeight(Math.min(Math.max(rect.bottom - ev.clientY, 160), Math.max(max, 160)))
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  function toggleMaximizeControls() {
+    const container = centerColRef.current
+    if (!controlsMaximized) {
+      restoreHeightRef.current = controlsHeight
+      const rect = container?.getBoundingClientRect()
+      const target = rect ? rect.height - 132 : 640
+      setControlsMaximized(true)
+      commitControlsHeight(target)
+    } else {
+      setControlsMaximized(false)
+      commitControlsHeight(restoreHeightRef.current)
+    }
+  }
+
+  // Which nodes/edges are highlighted is driven by the unified `focus`, not the timeline.
+  const focusNodeIds = useMemo(() => {
+    if (!focus) return new Set<string>()
+    if (focus.kind === 'step') return new Set(focus.step.involvedNodeIds)
+    if (focus.kind === 'node') return new Set([focus.node.id])
+    return new Set([focus.edge.source, focus.edge.target])
+  }, [focus])
+  const focusEdgeIds = useMemo(() => {
+    if (!focus) return new Set<string>()
+    if (focus.kind === 'step') return new Set(focus.step.involvedEdgeIds ?? [])
+    if (focus.kind === 'edge') return new Set([focus.edge.id])
+    return new Set<string>()
+  }, [focus])
+
+  const { nodes, edges } = useMemo(() => {
+    const n = flow.nodes.map((node) => {
+      const status = nodeStatus(node.id, statusesByStepId, flow)
+      return {
+        id: node.id,
+        type: 'flowNode',
+        position: node.position,
+        data: { label: node.label, kind: node.kind, status, selected: focusNodeIds.has(node.id) },
+      }
+    })
+
+    const e = flow.edges.map((edge) => {
+      const st = edge.stepId ? statusesByStepId[edge.stepId] : undefined
+      const selected = focusEdgeIds.has(edge.id)
+      const isRequest = edge.kind === 'request'
+      const isRedirect = edge.kind === 'redirect'
+      const isRelation = edge.kind === 'relation'
+      const isResponse = edge.kind === 'response'
+      const isActive = Boolean(edge.stepId && statusesByStepId[edge.stepId] === 'active')
+      const strokeColor =
+        st === 'error'
+          ? 'var(--statusError)'
+          : st === 'success'
+            ? 'var(--statusOk)'
+            : st === 'active'
+              ? 'var(--statusActive)'
+              : isRelation
+                ? 'rgba(15, 23, 42, 0.18)'
+                : isRedirect
+                  ? 'rgba(0, 59, 92, 0.68)'
+                  : isRequest
+                    ? 'rgba(0, 59, 92, 0.58)'
+                    : 'rgba(15, 23, 42, 0.26)'
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: 'smoothstep',
+        label: edge.label,
+        className: isActive ? 'edge-flow-active' : undefined,
+        markerEnd: isRelation ? undefined : { type: MarkerType.ArrowClosed, width: 20, height: 20, color: strokeColor },
+        animated: isRedirect || isActive,
+        style: {
+          strokeWidth: selected ? 3 : isRelation ? 1 : isResponse ? 1.3 : 1.6,
+          stroke: strokeColor,
+          strokeDasharray: isRedirect ? '5 5' : isResponse ? '2 6' : undefined,
+          opacity: focus && !selected ? 0.55 : 1,
+        },
+        labelStyle: { fill: 'rgba(11, 18, 32, 0.72)', fontSize: 12 },
+      }
+    })
+
+    return { nodes: n as any, edges: e as any }
+  }, [flow, focusNodeIds, focusEdgeIds, focus, statusesByStepId])
+
+  useAutoFitOnFocus(focus)
+
+  function clearTimer() {
+    if (timerRef.current) window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  // Timeline click: moves BOTH the timeline highlight and the explanation/focus.
+  function selectStep(id: string) {
+    setSelectedStepId(id)
+    setSelection({ kind: 'step', id })
+  }
+
+  function appendEvent(e: RunnerEvent) {
+    setEvents((prev) => [...prev, e])
+    if (e.stepId) {
+      const sid = e.stepId
+      setSelectedStepId((curr) => curr || sid)
+      // Until the user clicks something, follow the running step in the explanation panel.
+      setSelection((curr) => curr ?? { kind: 'step', id: sid })
+    }
+  }
+
+  function connectToRunner() {
+    if (transport === 'mock') return
+    setConnected('disconnected')
+    const client = createRunnerClient(baseUrl, transport === 'ws' ? 'ws' : 'sse')
+    clientRef.current = client
+    client.connect({
+      onConnected: () => setConnected('connected'),
+      onDisconnected: () => setConnected('disconnected'),
+      onEvent: (e) => appendEvent(e),
+    })
+  }
+
+  function disconnectFromRunner() {
+    clientRef.current?.disconnect()
+    clientRef.current = null
+    setConnected('disconnected')
+  }
+
+  async function startRun() {
+    setEvents([])
+    setIsPaused(false)
+    isPausedRef.current = false
+    clearTimer()
+
+    if (transport === 'mock') {
+      playbackRef.current = { queue: makeMockRunEvents('https://example.com/consent'), i: 0 }
+      pumpPlayback()
+      return
+    }
+
+    const missing: string[] = []
+    if (!keyId.trim()) missing.push('Key ID')
+    if (!privateKeyPath.trim()) missing.push('Private key path')
+    if (!clientWalletAddressUrl.trim()) missing.push('Client wallet address')
+    if (!sendingWalletAddressUrl.trim()) missing.push('Sending wallet address')
+    if (!receivingWalletAddressUrl.trim()) missing.push('Receiving wallet address')
+
+    if (missing.length) {
+      const credMissing = missing.some((m) => m.includes('Key') || m.includes('Private'))
+      setBottomTab('setup')
+      // Expand the relevant config section so the missing fields are visible.
+      setOpenSections((s) => ({ ...s, credentials: s.credentials || credMissing, addresses: s.addresses || !credMissing }))
+      appendEvent({
+        id: crypto.randomUUID(),
+        runId: 'local',
+        ts: new Date().toISOString(),
+        type: 'runner.error',
+        level: 'error',
+        message: `Missing required fields: ${missing.join(', ')}.`,
+      })
+      return
+    }
+
+    if (!clientRef.current) connectToRunner()
+    const config: RunnerConfig = {
+      keyId,
+      privateKeyPath,
+      clientWalletAddressUrl: normalizeWalletAddressInput(clientWalletAddressUrl),
+      sendingWalletAddressUrl: normalizeWalletAddressInput(sendingWalletAddressUrl),
+      receivingWalletAddressUrl: normalizeWalletAddressInput(receivingWalletAddressUrl),
+      callbackPort,
+      scenarioId,
+      uiBaseUrl,
+    }
+    try {
+      await clientRef.current?.startRun(config)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      appendEvent({
+        id: crypto.randomUUID(),
+        runId: 'local',
+        ts: new Date().toISOString(),
+        type: 'runner.error',
+        level: 'error',
+        message: `Failed to start run: ${message}`,
+      })
+    }
+  }
+
+  function openConsent() {
+    const url = lastRedirectUrl
+    if (!url) return
+    window.open(url, '_blank', 'noopener,noreferrer')
+
+    if (transport === 'mock') {
+      // Simulate the runner continuing after consent.
+      clearTimer()
+      playbackRef.current = { queue: makeMockConsentCompletionEvents(), i: 0 }
+      pumpPlayback()
+    }
+  }
+
+  async function continueAfterConsent() {
+    if (transport === 'mock') return
+    await clientRef.current?.resume()
+  }
+
+  async function togglePause() {
+    const next = !isPaused
+    setIsPaused(next)
+    isPausedRef.current = next
+    if (transport === 'mock') {
+      if (!next) pumpPlayback() // resuming: restart the loop from where it stopped
+    } else {
+      await (next ? clientRef.current?.pause() : clientRef.current?.resume())
+    }
+  }
+
+  useEffect(() => {
+    if (transport === 'mock') {
+      disconnectFromRunner()
+      return
+    }
+    connectToRunner()
+    return () => disconnectFromRunner()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transport, baseUrl])
+
+  // Listen for the consent tab signaling that the user completed the interaction.
+  // The runner continues the grant automatically; this just surfaces an acknowledgment.
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return
+    const bc = new BroadcastChannel('opviz.consent')
+    bc.onmessage = (ev) => {
+      if (ev.data?.type === 'consent-complete') setConsentAck(true)
+    }
+    return () => bc.close()
+  }, [])
+
+  // Once new events arrive after consent (e.g. grant.continued), clear the acknowledgment.
+  useEffect(() => {
+    if (consentState.needsConsent) setConsentAck(false)
+  }, [consentState.needsConsent])
+
+  const consentEnabled = Boolean(lastRedirectUrl)
+  const continueEnabled = transport !== 'mock' && consentState.hasInteractive
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <div className="left">
+          <div className="field scenarioPicker">
+            <label>Scenario</label>
+            <select value={scenarioId} onChange={(e) => setScenarioId(e.target.value)}>
+              {scenarios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="badge">
+            <span className={`dot ${connected === 'connected' || transport === 'mock' ? 'ok' : 'bad'}`} />
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+              <div style={{ fontWeight: 650, fontSize: 13 }}>Runner</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {transport === 'mock' ? 'mock events' : connected}
+              </div>
+            </div>
+          </div>
+
+          <div className="btnRow">
+            <button className="btn primary" onClick={startRun}>
+              <span className="btnIcon" aria-hidden="true">▶</span> Start
+            </button>
+            <button className="btn secondary" onClick={openConsent} disabled={!consentEnabled}>
+              <span className="btnIcon" aria-hidden="true">↗</span> Consent
+            </button>
+            <button className="btn secondary" onClick={continueAfterConsent} disabled={!continueEnabled}>
+              <span className="btnIcon" aria-hidden="true">⏵</span> Continue
+            </button>
+            <button className={`btn ${isPaused ? 'gold' : 'secondary'}`} onClick={togglePause}>
+              <span className="btnIcon" aria-hidden="true">{isPaused ? '▶' : '⏸'}</span> {isPaused ? 'Resume' : 'Pause'}
+            </button>
+          </div>
+
+          <div className="speed">
+            <span className="speedLabel">Speed</span>
+            <div className="speedPresets">
+              {[0.5, 1, 2, 3].map((s) => (
+                <button
+                  key={s}
+                  className={`speedPreset ${speed === s ? 'active' : ''}`}
+                  onClick={() => setSpeed(s)}
+                >
+                  {s}×
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="right">
+          <div className="field" style={{ minWidth: 160 }}>
+            <label>Transport</label>
+            <select value={transport} onChange={(e) => setTransport(e.target.value as TransportMode)}>
+              <option value="mock">Mock (built-in)</option>
+              <option value="sse">SSE (runner)</option>
+              <option value="ws">WebSocket (runner)</option>
+            </select>
+            <div className="subtleHelp">Mock replays a built-in trace. SSE/WS connect to the local runner.</div>
+          </div>
+        </div>
+      </div>
+
+      <div className={`layout ${timelineCollapsed ? 'timeline-collapsed' : ''} ${narrationCollapsed ? 'narration-collapsed' : ''}`}>
+        {timelineCollapsed ? (
+          <div className="panel collapsedRail">
+            <button className="railToggle" title="Show timeline" onClick={() => setTimelineCollapsed(false)}>
+              <span className="railLabel">Timeline</span>
+              <span className="railShow">Show</span>
+            </button>
+          </div>
+        ) : (
+        <div className="panel">
+          <div className="panelHeader">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <h2>Timeline</h2>
+              <button className="tab active" onClick={() => setTimelineCollapsed(true)}>
+                Hide
+              </button>
+            </div>
+          </div>
+          <div className="panelBody">
+            <div className="timeline">
+              <div className="timelineGroup">Discovery</div>
+              {flow.steps
+                .filter((s) => s.id === 'step-wallet-resolve')
+                .map((step) => {
+                  const st = statusesByStepId[step.id] ?? 'idle'
+                  return (
+                    <div
+                      key={step.id}
+                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
+                      onClick={() => selectStep(step.id)}
+                    >
+                      <div className="title">
+                        <div>{step.title}</div>
+                        <div className={pillClass(st)}>{st}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+              <div className="timelineGroup">Incoming payment</div>
+              {flow.steps
+                .filter((s) => s.id === 'step-grant-incoming' || s.id === 'step-incoming-payment')
+                .map((step) => {
+                  const st = statusesByStepId[step.id] ?? 'idle'
+                  return (
+                    <div
+                      key={step.id}
+                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
+                      onClick={() => selectStep(step.id)}
+                    >
+                      <div className="title">
+                        <div>{step.title}</div>
+                        <div className={pillClass(st)}>{st}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+              <div className="timelineGroup">Quote</div>
+              {flow.steps
+                .filter((s) => s.id === 'step-grant-quote' || s.id === 'step-quote')
+                .map((step) => {
+                  const st = statusesByStepId[step.id] ?? 'idle'
+                  return (
+                    <div
+                      key={step.id}
+                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
+                      onClick={() => selectStep(step.id)}
+                    >
+                      <div className="title">
+                        <div>{step.title}</div>
+                        <div className={pillClass(st)}>{st}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+              <div className="timelineGroup">Outgoing payment</div>
+              {flow.steps
+                .filter(
+                  (s) =>
+                    s.id === 'step-grant-outgoing-interactive' ||
+                    s.id === 'step-grant-outgoing-continue' ||
+                    s.id === 'step-outgoing-payment'
+                )
+                .map((step) => {
+                  const st = statusesByStepId[step.id] ?? 'idle'
+                  return (
+                    <div
+                      key={step.id}
+                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
+                      onClick={() => selectStep(step.id)}
+                    >
+                      <div className="title">
+                        <div>{step.title}</div>
+                        <div className={pillClass(st)}>{st}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+            </div>
+        </div>
+        )}
+
+        <div
+          className="centerCol"
+          ref={centerColRef}
+          style={{ gridTemplateRows: `minmax(120px, 1fr) 10px ${Math.round(controlsHeight)}px` }}
+        >
+          <div className="panel">
+            <div className="panelHeader">
+              <h2>Flow</h2>
+            </div>
+            <div className="flowWrap">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                fitView
+                proOptions={{ hideAttribution: true }}
+                onNodeClick={(_, n) => setSelection({ kind: 'node', id: String(n.id) })}
+                onEdgeClick={(_, ed) => setSelection({ kind: 'edge', id: String(ed.id) })}
+              >
+                <Background color="rgba(0,0,0,0.06)" gap={24} />
+              </ReactFlow>
+            </div>
+          </div>
+
+          <div
+            className="rowResizer"
+            role="separator"
+            aria-orientation="horizontal"
+            title="Drag to resize"
+            onMouseDown={startControlsResize}
+            onDoubleClick={toggleMaximizeControls}
+          >
+            <span className="rowResizerGrip" />
+          </div>
+
+          <div className="panel">
+            <div className="panelHeader">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <h2>Scenario Controls</h2>
+                <div className="tabBar">
+                  <button className={`tab ${bottomTab === 'inspector' ? 'active' : ''}`} onClick={() => setBottomTab('inspector')}>
+                    Event Logs
+                  </button>
+                  <button className={`tab ${bottomTab === 'setup' ? 'active' : ''}`} onClick={() => setBottomTab('setup')}>
+                    Configuration
+                  </button>
+                  <button className="tab" title={controlsMaximized ? 'Restore' : 'Maximize'} onClick={toggleMaximizeControls}>
+                    {controlsMaximized ? 'Restore' : 'Maximize'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="panelBody">
+              {bottomTab === 'inspector' ? (
+                <div className="inspectorList">
+                  {[...events].slice(-60).reverse().map((e) => {
+                    const varName = eventVarName(e)
+                    const title = e.stepId ? `${e.type} · ${e.stepId}` : e.type
+                    return (
+                      <details key={e.id} className="eventRow">
+                        <summary style={{ borderLeft: `6px solid var(${varName})` }}>
+                          <div className="eventMeta">
+                            <span className="eventTag" style={{ borderColor: `var(${varName})`, color: `var(${varName})` }}>
+                              {e.type}
+                            </span>
+                            <div className="eventTitle">{title}</div>
+                          </div>
+                          <div className="eventTime">{formatTime(e.ts)}</div>
+                        </summary>
+                        <div className="eventBody">
+                          <pre>{prettyJson(e)}</pre>
+                        </div>
+                      </details>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="configForm">
+                  <div className="subtleHelp">
+                    Paste payment pointers like <strong>$ilp.interledger-test.dev/usdtest</strong>. Saved scenarios store non-secret
+                    fields for quick reuse.
+                  </div>
+
+                  <CollapsibleCard
+                    title="Scenario & Endpoints"
+                    open={openSections.scenario}
+                    onToggle={() => setOpenSections((s) => ({ ...s, scenario: !s.scenario }))}
+                  >
+                    <div className="field">
+                      <label>Saved scenarios</label>
+                      <div className="scenarioRow">
+                        <select
+                          value={selectedScenario}
+                          onChange={(e) => {
+                            const id = e.target.value
+                            setSelectedScenario(id)
+                            const sc = savedScenarios.find((s) => s.id === id)
+                            if (sc) applyScenario(sc)
+                            else setScenarioName('')
+                          }}
+                        >
+                          <option value="">(new — unsaved)</option>
+                          {savedScenarios.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                        <span className={`pill ${selectedScenario ? 'ok' : ''}`}>
+                          {selectedScenario
+                            ? `Editing: ${savedScenarios.find((s) => s.id === selectedScenario)?.name ?? '—'}`
+                            : 'Unsaved (new)'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="field">
+                      <label>Scenario name</label>
+                      <input
+                        value={scenarioName}
+                        onChange={(e) => setScenarioName(e.target.value)}
+                        placeholder="e.g. USD → EUR test"
+                      />
+                    </div>
+
+                    <div className="btnRow scenarioActions">
+                      <button className="btn" onClick={saveScenario}>
+                        {selectedScenario ? 'Save' : 'Save scenario'}
+                      </button>
+                      <button className="btn secondary" onClick={saveScenarioAsNew}>
+                        Save as new
+                      </button>
+                      <button className="btn secondary" onClick={duplicateScenario} disabled={!selectedScenario}>
+                        Duplicate
+                      </button>
+                      <button className="btn danger" onClick={deleteScenario} disabled={!selectedScenario}>
+                        Delete
+                      </button>
+                    </div>
+                    <div className="subtleHelp">
+                      Saves addresses + Key ID + endpoints. Does <strong>not</strong> save private key contents.
+                    </div>
+
+                    <div className="grid2" style={{ marginTop: 4 }}>
+                      <div className="field">
+                        <label>Runner base URL</label>
+                        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://localhost:3344" />
+                      </div>
+                      <div className="field">
+                        <label>UI base URL (consent redirect)</label>
+                        <input value={uiBaseUrl} onChange={(e) => setUiBaseUrl(e.target.value)} placeholder="http://localhost:5173/" />
+                      </div>
+                      <div className="field">
+                        <label>Callback port</label>
+                        <input type="number" value={callbackPort} onChange={(e) => setCallbackPort(Number(e.target.value))} />
+                      </div>
+                    </div>
+                    <div className="subtleHelp">
+                      The active scenario is chosen from the <strong>Scenario</strong> picker in the top bar.
+                    </div>
+                  </CollapsibleCard>
+
+                  <CollapsibleCard
+                    title="Credentials"
+                    hint="Stored locally · key contents never read by the UI"
+                    open={openSections.credentials}
+                    onToggle={() => setOpenSections((s) => ({ ...s, credentials: !s.credentials }))}
+                  >
+                    <div className="grid2">
+                      <div className="field">
+                        <label>Key ID</label>
+                        <input value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="(from your *_KEY_ID.txt)" />
+                      </div>
+                      <div className="field">
+                        <label>Private key file (picker)</label>
+                        <input
+                          type="file"
+                          accept=".key,.pem,.txt"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0]
+                            if (!f) return
+                            setPrivateKeyHint(f.name)
+                            if (!privateKeyPath) setPrivateKeyPath(f.name)
+                          }}
+                        />
+                      </div>
+                      <div className="field" style={{ gridColumn: '1 / -1' }}>
+                        <label>Private key path (local runner)</label>
+                        <input value={privateKeyPath} onChange={(e) => setPrivateKeyPath(e.target.value)} placeholder="C:\\Users\\...\\USD_KEY.key" />
+                        <div className="subtleHelp">
+                          Selected: <strong>{privateKeyHint || '(none)'}</strong>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="hint">This UI never reads key contents. The local runner reads the key from the path.</div>
+                  </CollapsibleCard>
+
+                  <CollapsibleCard
+                    title="Wallet Addresses"
+                    open={openSections.addresses}
+                    onToggle={() => setOpenSections((s) => ({ ...s, addresses: !s.addresses }))}
+                  >
+                    <div className="grid2">
+                      <div className="field">
+                        <label>Client wallet address</label>
+                        <input value={clientWalletAddressUrl} onChange={(e) => setClientWalletAddressUrl(e.target.value)} placeholder="$ilp.interledger-test.dev/usdtest" />
+                        <AddressPreview value={clientWalletAddressUrl} />
+                      </div>
+                      <div className="field">
+                        <label>Sending wallet address</label>
+                        <input value={sendingWalletAddressUrl} onChange={(e) => setSendingWalletAddressUrl(e.target.value)} placeholder="$ilp.interledger-test.dev/usdtest" />
+                        <AddressPreview value={sendingWalletAddressUrl} />
+                      </div>
+                      <div className="field" style={{ gridColumn: '1 / -1' }}>
+                        <label>Receiving wallet address</label>
+                        <input value={receivingWalletAddressUrl} onChange={(e) => setReceivingWalletAddressUrl(e.target.value)} placeholder="$ilp.interledger-test.dev/a23bbe02" />
+                        <AddressPreview value={receivingWalletAddressUrl} />
+                      </div>
+                    </div>
+                  </CollapsibleCard>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {narrationCollapsed ? (
+          <div className="panel collapsedRail">
+            <button className="railToggle" title="Show flow narration" onClick={() => setNarrationCollapsed(false)}>
+              <span className="railLabel">Flow narration</span>
+              <span className="railShow">Show</span>
+            </button>
+          </div>
+        ) : (
+        <div className="panel">
+          <div className="panelHeader">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <h2>Flow narration</h2>
+              <button className="tab active" onClick={() => setNarrationCollapsed(true)}>
+                Hide
+              </button>
+            </div>
+          </div>
+          <div className="panelBody">
+            <div className="narration">
+              <div className="narrHead">
+                <div className="narrTitle" style={{ color: `var(${focusHeader.colorVar})` }}>
+                  {focusHeader.title}
+                </div>
+                {focusHeader.badge ? (
+                  <span
+                    className="narrBadge"
+                    style={{ color: `var(${focusHeader.colorVar})`, borderColor: `var(${focusHeader.colorVar})` }}
+                  >
+                    {focusHeader.badge}
+                  </span>
+                ) : null}
+              </div>
+              <div className="narrBody">
+                {narration.map((seg, i) => (
+                  <div className="narrSection" key={i}>
+                    {seg.label ? <div className="narrLabel">{seg.label}</div> : null}
+                    <NarrationParagraph text={seg.body} />
+                  </div>
+                ))}
+              </div>
+              {consentAck ? (
+                <div className="hint ok">
+                  ✓ Consent received from the other tab. The runner is continuing the grant automatically.
+                </div>
+              ) : consentState.needsConsent && consentEnabled ? (
+                <div className="hint">
+                  Consent is required. Use <strong>Consent</strong> to open the redirect, then <strong>Continue</strong> when
+                  you’re back.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Standalone view shown when the auth server (via the runner's callback) redirects
+// the consent tab back to the UI with `?consent=ok&runId=...`. It signals the original
+// visualizer tab that consent completed, then invites the user to return.
+function ConsentReturn({ runId }: { runId?: string }) {
+  useEffect(() => {
+    try {
+      const bc = new BroadcastChannel('opviz.consent')
+      bc.postMessage({ type: 'consent-complete', runId })
+      bc.close()
+    } catch {
+      // BroadcastChannel unsupported — fall back to a storage event below.
+    }
+    try {
+      localStorage.setItem('opviz.consent.lastComplete', JSON.stringify({ runId: runId ?? null, at: Date.now() }))
+    } catch {
+      // ignore
+    }
+    // Clear the consent params so a refresh of this tab doesn't re-trigger anything.
+    try {
+      window.history.replaceState({}, '', window.location.pathname)
+    } catch {
+      // ignore
+    }
+  }, [runId])
+
+  return (
+    <div className="consentReturn">
+      <div className="consentCard">
+        <div className="consentCheck" aria-hidden="true">
+          ✓
+        </div>
+        <h1>Consent received</h1>
+        <p>
+          Your authorization was captured. The visualizer is continuing the run in your original tab — the outgoing
+          payment will be created automatically.
+        </p>
+        <p className="subtleHelp">You can safely close this tab and return to the OpenPayments visualizer.</p>
+        <button
+          className="btn"
+          onClick={() => {
+            window.close()
+          }}
+        >
+          Close this tab
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function App() {
+  const consentParams =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  if (consentParams.get('consent') === 'ok') {
+    return <ConsentReturn runId={consentParams.get('runId') ?? undefined} />
+  }
+
+  return (
+    <ReactFlowProvider>
+      <AppInner />
+    </ReactFlowProvider>
+  )
+}
+
