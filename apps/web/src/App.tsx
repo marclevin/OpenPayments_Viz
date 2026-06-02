@@ -194,6 +194,7 @@ function AppInner() {
   // `selection` is the unified thing being explained + focused in the graph (node | edge | step).
   const [selection, setSelection] = useState<Selection>({ kind: 'step', id: flow.steps[0]?.id ?? '' })
   const [isPaused, setIsPaused] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
   const [speed, setSpeed] = useState(1.0)
   const [connected, setConnected] = useState<'disconnected' | 'connected'>('disconnected')
   const [bottomTab, setBottomTab] = useState<BottomTab>('inspector')
@@ -312,6 +313,7 @@ function AppInner() {
     clearTimer()
     playbackRef.current = null
     setEvents([])
+    setIsRunning(false)
     setIsPaused(false)
     isPausedRef.current = false
     const first = flow.steps[0]?.id ?? ''
@@ -553,6 +555,11 @@ function AppInner() {
 
   function appendEvent(e: RunnerEvent) {
     setEvents((prev) => [...prev, e])
+    if (e.type === 'run.completed' || e.type === 'runner.error') {
+      setIsRunning(false)
+      setIsPaused(false)
+      isPausedRef.current = false
+    }
     if (e.stepId) {
       const sid = e.stepId
       setSelectedStepId((curr) => curr || sid)
@@ -580,12 +587,14 @@ function AppInner() {
   }
 
   async function startRun() {
+    if (isRunning) return
     setEvents([])
     setIsPaused(false)
     isPausedRef.current = false
     clearTimer()
 
     if (transport === 'mock') {
+      setIsRunning(true)
       playbackRef.current = { queue: makeMockRunEvents('https://example.com/consent'), i: 0 }
       pumpPlayback()
       return
@@ -625,9 +634,11 @@ function AppInner() {
       scenarioId,
       uiBaseUrl,
     }
+    setIsRunning(true)
     try {
       await clientRef.current?.startRun(config)
     } catch (err) {
+      setIsRunning(false)
       const message = err instanceof Error ? err.message : String(err)
       appendEvent({
         id: crypto.randomUUID(),
@@ -651,11 +662,6 @@ function AppInner() {
       playbackRef.current = { queue: makeMockConsentCompletionEvents(), i: 0 }
       pumpPlayback()
     }
-  }
-
-  async function continueAfterConsent() {
-    if (transport === 'mock') return
-    await clientRef.current?.resume()
   }
 
   async function togglePause() {
@@ -696,13 +702,20 @@ function AppInner() {
   }, [consentState.needsConsent])
 
   const consentEnabled = Boolean(lastRedirectUrl)
-  const continueEnabled = transport !== 'mock' && consentState.hasInteractive
 
   return (
     <div className="app">
       <div className="topbar">
         <div className="left">
-          <div className="field scenarioPicker">
+          <div className="field" style={{ minWidth: 160 }}>
+            <label>Method</label>
+            <select value={transport} onChange={(e) => setTransport(e.target.value as TransportMode)}>
+              <option value="mock">Mocked</option>
+              <option value="sse">Interledger TestNet</option>
+            </select>
+          </div>
+
+          <div className="field" style={{ minWidth: 200 }}>
             <label>Scenario</label>
             <select value={scenarioId} onChange={(e) => setScenarioId(e.target.value)}>
               {scenarios.map((s) => (
@@ -712,28 +725,21 @@ function AppInner() {
               ))}
             </select>
           </div>
+        </div>
 
-          <div className="badge">
-            <span className={`dot ${connected === 'connected' || transport === 'mock' ? 'ok' : 'bad'}`} />
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-              <div style={{ fontWeight: 650, fontSize: 13 }}>Runner</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {transport === 'mock' ? 'mock events' : connected}
-              </div>
-            </div>
-          </div>
-
+        <div className="center">
           <div className="btnRow">
-            <button className="btn primary" onClick={startRun}>
+            <button className={`btn primary${isRunning ? ' running' : ''}`} onClick={startRun} disabled={isRunning}>
               <span className="btnIcon" aria-hidden="true">▶</span> Start
             </button>
-            <button className="btn secondary" onClick={openConsent} disabled={!consentEnabled}>
+            <button className="btn secondary" onClick={openConsent} disabled={!isRunning || !consentEnabled}>
               <span className="btnIcon" aria-hidden="true">↗</span> Consent
             </button>
-            <button className="btn secondary" onClick={continueAfterConsent} disabled={!continueEnabled}>
-              <span className="btnIcon" aria-hidden="true">⏵</span> Continue
-            </button>
-            <button className={`btn ${isPaused ? 'gold' : 'secondary'}`} onClick={togglePause}>
+            <button
+              className={`btn ${isPaused ? 'gold' : 'secondary'}`}
+              onClick={togglePause}
+              disabled={!isRunning}
+            >
               <span className="btnIcon" aria-hidden="true">{isPaused ? '▶' : '⏸'}</span> {isPaused ? 'Resume' : 'Pause'}
             </button>
           </div>
@@ -755,14 +761,14 @@ function AppInner() {
         </div>
 
         <div className="right">
-          <div className="field" style={{ minWidth: 160 }}>
-            <label>Transport</label>
-            <select value={transport} onChange={(e) => setTransport(e.target.value as TransportMode)}>
-              <option value="mock">Mock (built-in)</option>
-              <option value="sse">SSE (runner)</option>
-              <option value="ws">WebSocket (runner)</option>
-            </select>
-            <div className="subtleHelp">Mock replays a built-in trace. SSE/WS connect to the local runner.</div>
+          <div className="badge">
+            <span className={`dot ${connected === 'connected' || transport === 'mock' ? 'ok' : 'bad'}`} />
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+              <div style={{ fontWeight: 650, fontSize: 13 }}>Runner</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {transport === 'mock' ? 'mock events' : connected}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -927,41 +933,43 @@ function AppInner() {
             <div className="panelBody">
               {bottomTab === 'inspector' ? (
                 <div className="inspectorList">
-                  {[...events].slice(-60).reverse().map((e) => {
-                    const varName = eventVarName(e)
-                    const title = e.stepId ? `${e.type} · ${e.stepId}` : e.type
-                    return (
-                      <details key={e.id} className="eventRow">
-                        <summary style={{ borderLeft: `6px solid var(${varName})` }}>
-                          <div className="eventMeta">
-                            <span className="eventTag" style={{ borderColor: `var(${varName})`, color: `var(${varName})` }}>
-                              {e.type}
-                            </span>
-                            <div className="eventTitle">{title}</div>
+                  {events.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
+                      Run a scenario to generate events.
+                    </div>
+                  ) : (
+                    [...events].slice(-60).reverse().map((e) => {
+                      const varName = eventVarName(e)
+                      const title = e.stepId ? `${e.type} · ${e.stepId}` : e.type
+                      return (
+                        <details key={e.id} className="eventRow">
+                          <summary style={{ borderLeft: `6px solid var(${varName})` }}>
+                            <div className="eventMeta">
+                              <span className="eventTag" style={{ borderColor: `var(${varName})`, color: `var(${varName})` }}>
+                                {e.type}
+                              </span>
+                              <div className="eventTitle">{title}</div>
+                            </div>
+                            <div className="eventTime">{formatTime(e.ts)}</div>
+                          </summary>
+                          <div className="eventBody">
+                            <pre>{prettyJson(e)}</pre>
                           </div>
-                          <div className="eventTime">{formatTime(e.ts)}</div>
-                        </summary>
-                        <div className="eventBody">
-                          <pre>{prettyJson(e)}</pre>
-                        </div>
-                      </details>
-                    )
-                  })}
+                        </details>
+                      )
+                    })
+                  )}
                 </div>
               ) : (
                 <div className="configForm">
-                  <div className="subtleHelp">
-                    Paste payment pointers like <strong>$ilp.interledger-test.dev/usdtest</strong>. Saved scenarios store non-secret
-                    fields for quick reuse.
-                  </div>
-
                   <CollapsibleCard
-                    title="Scenario & Endpoints"
+                    title="Configuration & Endpoints"
+                    hint="Save/load your setup for later"
                     open={openSections.scenario}
                     onToggle={() => setOpenSections((s) => ({ ...s, scenario: !s.scenario }))}
                   >
                     <div className="field">
-                      <label>Saved scenarios</label>
+                      <label>Select Configuration</label>
                       <div className="scenarioRow">
                         <select
                           value={selectedScenario}
@@ -989,7 +997,7 @@ function AppInner() {
                     </div>
 
                     <div className="field">
-                      <label>Scenario name</label>
+                      <label>Configuration Name</label>
                       <input
                         value={scenarioName}
                         onChange={(e) => setScenarioName(e.target.value)}
@@ -999,7 +1007,7 @@ function AppInner() {
 
                     <div className="btnRow scenarioActions">
                       <button className="btn" onClick={saveScenario}>
-                        {selectedScenario ? 'Save' : 'Save scenario'}
+                        {selectedScenario ? 'Save' : 'Save Configuration'}
                       </button>
                       <button className="btn secondary" onClick={saveScenarioAsNew}>
                         Save as new
@@ -1029,14 +1037,11 @@ function AppInner() {
                         <input type="number" value={callbackPort} onChange={(e) => setCallbackPort(Number(e.target.value))} />
                       </div>
                     </div>
-                    <div className="subtleHelp">
-                      The active scenario is chosen from the <strong>Scenario</strong> picker in the top bar.
-                    </div>
                   </CollapsibleCard>
 
                   <CollapsibleCard
                     title="Credentials"
-                    hint="Stored locally · key contents never read by the UI"
+                    hint="Client Credentials"
                     open={openSections.credentials}
                     onToggle={() => setOpenSections((s) => ({ ...s, credentials: !s.credentials }))}
                   >
@@ -1071,6 +1076,7 @@ function AppInner() {
 
                   <CollapsibleCard
                     title="Wallet Addresses"
+                    hint="ILP wallet addresses"
                     open={openSections.addresses}
                     onToggle={() => setOpenSections((s) => ({ ...s, addresses: !s.addresses }))}
                   >
@@ -1144,8 +1150,8 @@ function AppInner() {
                 </div>
               ) : consentState.needsConsent && consentEnabled ? (
                 <div className="hint">
-                  Consent is required. Use <strong>Consent</strong> to open the redirect, then <strong>Continue</strong> when
-                  you’re back.
+                  Consent is required. Use <strong>Consent</strong> to open the redirect and approve — the run continues
+                  automatically once you’re back.
                 </div>
               ) : null}
             </div>
