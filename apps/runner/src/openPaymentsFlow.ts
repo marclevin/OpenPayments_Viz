@@ -6,6 +6,7 @@ import {
 import type { RequestHandler } from 'express'
 import express from 'express'
 import type {
+  FlowExecutionSpec,
   RunnerEvent,
   RunId,
   StepId
@@ -19,6 +20,7 @@ export type RunnerConfig = {
   privateKeyPath: string
   callbackPort?: number
   uiBaseUrl?: string
+  scenarioId?: string
 }
 
 type Emit = (evt: RunnerEvent) => void
@@ -29,16 +31,16 @@ function isFinalizedGrantLike(grant: unknown): grant is { access_token: { value:
   return Boolean(g?.access_token?.value && typeof g.access_token.value === 'string' && !isPendingGrant(g))
 }
 
-const steps = {
-  walletResolve: 'step-wallet-resolve',
-  incomingGrant: 'step-grant-incoming',
-  incomingPayment: 'step-incoming-payment',
-  quoteGrant: 'step-grant-quote',
-  quote: 'step-quote',
-  outgoingGrantInteractive: 'step-grant-outgoing-interactive',
-  outgoingGrantContinue: 'step-grant-outgoing-continue',
-  outgoingPayment: 'step-outgoing-payment'
-} satisfies Record<string, StepId>
+// Build a valid recurring interval from a spec template (e.g. "R12/<start>/P1M") by replacing
+// its start segment with the current time, so the testnet auth server accepts it.
+function buildInterval(template: string): string {
+  const parts = template.split('/')
+  if (parts.length === 3) {
+    parts[1] = nowIso()
+    return parts.join('/')
+  }
+  return template
+}
 
 function nowIso() {
   return new Date().toISOString()
@@ -149,9 +151,10 @@ function toRunnerError(runId: RunId, stepId: StepId | undefined, err: unknown): 
   }
 }
 
-export async function runOpenPaymentsP2PFlow(
+export async function runOpenPaymentsFlow(
   runId: RunId,
   config: RunnerConfig,
+  spec: FlowExecutionSpec,
   emit: Emit,
   waitIfPaused: WaitIfPaused = async () => {}
 ) {
@@ -173,7 +176,7 @@ export async function runOpenPaymentsP2PFlow(
       url: config.sendingWalletAddressUrl
     })
     emit({
-      ...newEventBase(runId, 'walletAddress.resolved', steps.walletResolve),
+      ...newEventBase(runId, 'walletAddress.resolved', spec.steps.walletResolve),
       wallet: 'sending',
       walletAddressUrl: config.sendingWalletAddressUrl,
       authServer: sendingWalletAddress.authServer,
@@ -188,7 +191,7 @@ export async function runOpenPaymentsP2PFlow(
       url: config.receivingWalletAddressUrl
     })
     emit({
-      ...newEventBase(runId, 'walletAddress.resolved', steps.walletResolve),
+      ...newEventBase(runId, 'walletAddress.resolved', spec.steps.walletResolve),
       wallet: 'receiving',
       walletAddressUrl: config.receivingWalletAddressUrl,
       authServer: receivingWalletAddress.authServer,
@@ -199,7 +202,7 @@ export async function runOpenPaymentsP2PFlow(
     })
 
     emit({
-      ...newEventBase(runId, 'grant.requested', steps.incomingGrant),
+      ...newEventBase(runId, 'grant.requested', spec.steps.incomingGrant),
       authServer: receivingWalletAddress.authServer,
       access: [
         {
@@ -226,7 +229,7 @@ export async function runOpenPaymentsP2PFlow(
       throw new Error('Expected finalized incoming payment grant')
     }
     emit({
-      ...newEventBase(runId, 'grant.finalized', steps.incomingGrant),
+      ...newEventBase(runId, 'grant.finalized', spec.steps.incomingGrant),
       authServer: receivingWalletAddress.authServer
     })
 
@@ -241,7 +244,7 @@ export async function runOpenPaymentsP2PFlow(
         incomingAmount: {
           assetCode: receivingWalletAddress.assetCode,
           assetScale: receivingWalletAddress.assetScale,
-          value: '1000'
+          value: spec.incomingAmount.value
         },
         metadata: {
           description: 'From OpenPayments flow visualizer runner'
@@ -249,12 +252,12 @@ export async function runOpenPaymentsP2PFlow(
       }
     )
     emit({
-      ...newEventBase(runId, 'incomingPayment.created', steps.incomingPayment),
+      ...newEventBase(runId, 'incomingPayment.created', spec.steps.incomingPayment),
       id: incomingPayment.id
     })
 
     emit({
-      ...newEventBase(runId, 'grant.requested', steps.quoteGrant),
+      ...newEventBase(runId, 'grant.requested', spec.steps.quoteGrant),
       authServer: sendingWalletAddress.authServer,
       access: [
         {
@@ -280,7 +283,7 @@ export async function runOpenPaymentsP2PFlow(
       throw new Error('Expected finalized quote grant')
     }
     emit({
-      ...newEventBase(runId, 'grant.finalized', steps.quoteGrant),
+      ...newEventBase(runId, 'grant.finalized', spec.steps.quoteGrant),
       authServer: sendingWalletAddress.authServer
     })
 
@@ -297,13 +300,13 @@ export async function runOpenPaymentsP2PFlow(
       }
     )
     emit({
-      ...newEventBase(runId, 'quote.created', steps.quote),
+      ...newEventBase(runId, 'quote.created', spec.steps.quote),
       id: quote.id,
       debitAmount: quote.debitAmount
     })
 
     emit({
-      ...newEventBase(runId, 'grant.requested', steps.outgoingGrantInteractive),
+      ...newEventBase(runId, 'grant.requested', spec.steps.outgoingGrantInteractive),
       authServer: sendingWalletAddress.authServer,
       access: [
         {
@@ -327,7 +330,9 @@ export async function runOpenPaymentsP2PFlow(
                   assetCode: quote.debitAmount.assetCode,
                   assetScale: quote.debitAmount.assetScale,
                   value: quote.debitAmount.value
-                }
+                },
+                // Recurring scenarios authorize repeated payments via an ISO 8601 interval.
+                ...(spec.outgoingInterval ? { interval: buildInterval(spec.outgoingInterval) } : {})
               },
               identifier: sendingWalletAddress.id
             }
@@ -349,7 +354,7 @@ export async function runOpenPaymentsP2PFlow(
     }
 
     emit({
-      ...newEventBase(runId, 'grant.interactive_required', steps.outgoingGrantInteractive),
+      ...newEventBase(runId, 'grant.interactive_required', spec.steps.outgoingGrantInteractive),
       authServer: sendingWalletAddress.authServer,
       redirectUrl: outgoingPaymentGrant.interact.redirect,
       callbackUrl
@@ -357,7 +362,7 @@ export async function runOpenPaymentsP2PFlow(
 
     const interactRef = await waitForInteractRef(runId, callbackPort, uiBaseUrl, (ref) => {
       emit({
-        ...newEventBase(runId, 'runner.log', steps.outgoingGrantInteractive),
+        ...newEventBase(runId, 'runner.log', spec.steps.outgoingGrantInteractive),
         message: 'Received interact_ref callback',
         data: { interactRef: ref }
       })
@@ -388,7 +393,7 @@ export async function runOpenPaymentsP2PFlow(
     }
 
     emit({
-      ...newEventBase(runId, 'grant.continued', steps.outgoingGrantContinue),
+      ...newEventBase(runId, 'grant.continued', spec.steps.outgoingGrantContinue),
       authServer: sendingWalletAddress.authServer
     })
 
@@ -408,9 +413,17 @@ export async function runOpenPaymentsP2PFlow(
     )
 
     emit({
-      ...newEventBase(runId, 'outgoingPayment.created', steps.outgoingPayment),
+      ...newEventBase(runId, 'outgoingPayment.created', spec.steps.outgoingPayment),
       id: outgoingPayment.id
     })
+
+    // Recurring scenarios: mark the informational explainer step as done.
+    if (spec.steps.recurring) {
+      emit({
+        ...newEventBase(runId, 'runner.log', spec.steps.recurring),
+        message: 'Recurring authorization active: the remaining payments are pre-approved on this grant.'
+      })
+    }
 
     emit({ ...newEventBase(runId, 'run.completed') })
   } catch (err) {

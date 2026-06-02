@@ -16,7 +16,10 @@
       "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Write-Output \"killing PID $\\($_.OwningProcess\\)\"; Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1; \\(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | Measure-Object\\).Count)",
       "Bash(ls -la node_modules/@opviz/)",
       "Bash(grep -n \"defaultScenarioId\" node_modules/@opviz/shared/src/scenarios/index.ts)",
-      "Bash(ls node_modules/.vite)"
+      "Bash(ls node_modules/.vite)",
+      "Bash(npm run *)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"port clear\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"runner stopped\")"
     ]
   }
 }

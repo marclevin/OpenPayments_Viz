@@ -57,6 +57,8 @@ export type FlowStep = {
   involvedEdgeIds?: EdgeId[]
   // Per-step explanation of how each involved node is used at this stage (keyed by NodeId).
   nodeRoles?: Record<NodeId, string>
+  // Optional timeline grouping label; consecutive steps sharing a group render under one header.
+  group?: string
 }
 
 export type FlowDefinition = {
@@ -66,6 +68,28 @@ export type FlowDefinition = {
   nodes: FlowNode[]
   edges: FlowEdge[]
   steps: FlowStep[]
+}
+
+// Maps a scenario's semantic flow stages to its concrete step ids, plus the amounts/interval
+// that parameterize the canonical Open Payments call sequence. Used by BOTH the runner (real
+// execution) and the web mock so a new scenario plugs in as data, not code.
+export type FlowExecutionSpec = {
+  scenarioId: FlowId
+  steps: {
+    walletResolve: StepId
+    incomingGrant: StepId
+    incomingPayment: StepId
+    quoteGrant: StepId
+    quote: StepId
+    outgoingGrantInteractive: StepId
+    outgoingGrantContinue: StepId
+    outgoingPayment: StepId
+    // Optional informational explainer step (e.g. recurring billing) — no network call.
+    recurring?: StepId
+  }
+  incomingAmount: { value: string; assetCode: string; assetScale: number }
+  // ISO 8601 repeating interval for a recurring outgoing-payment grant, e.g. "R12/<start>/P1M".
+  outgoingInterval?: string
 }
 
 export type RunId = string

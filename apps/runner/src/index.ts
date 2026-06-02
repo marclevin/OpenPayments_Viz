@@ -1,8 +1,9 @@
 import crypto from 'node:crypto'
 import express from 'express'
 import type { RunnerEvent, RunId } from '@opviz/shared'
+import { getExecutionSpec } from '@opviz/shared'
 import { SseHub } from './sse.js'
-import { runOpenPaymentsP2PFlow, type RunnerConfig } from './openPaymentsFlow.js'
+import { runOpenPaymentsFlow, type RunnerConfig } from './openPaymentsFlow.js'
 
 const app = express()
 
@@ -86,7 +87,8 @@ app.post('/run', (req, res) => {
     keyId: String(body?.keyId ?? ''),
     privateKeyPath: String(body?.privateKeyPath ?? ''),
     callbackPort: body?.callbackPort ? Number(body.callbackPort) : undefined,
-    uiBaseUrl: body?.uiBaseUrl ? String(body.uiBaseUrl) : undefined
+    uiBaseUrl: body?.uiBaseUrl ? String(body.uiBaseUrl) : undefined,
+    scenarioId: body?.scenarioId ? String(body.scenarioId) : undefined
   }
 
   if (
@@ -106,7 +108,8 @@ app.post('/run', (req, res) => {
   const runId: RunId = crypto.randomUUID()
   res.status(202).json({ runId })
 
-  void runOpenPaymentsP2PFlow(runId, config, emit, waitIfPaused)
+  const spec = getExecutionSpec(config.scenarioId)
+  void runOpenPaymentsFlow(runId, config, spec, emit, waitIfPaused)
 })
 
 app.post('/pause', (_req, res) => {

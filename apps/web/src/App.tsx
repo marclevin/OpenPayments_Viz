@@ -1,4 +1,4 @@
-import { defaultScenarioId, getScenarioById, scenarios } from '@opviz/shared/scenarios'
+import { defaultScenarioId, getExecutionSpec, getScenarioById, scenarios } from '@opviz/shared/scenarios'
 import type { FlowEdge, FlowNode as FlowNodeT, FlowStep, RunnerEvent, StepStatus } from '@opviz/shared'
 import { getStepStatusFromEvents } from '@opviz/shared'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -595,7 +595,7 @@ function AppInner() {
 
     if (transport === 'mock') {
       setIsRunning(true)
-      playbackRef.current = { queue: makeMockRunEvents('https://example.com/consent'), i: 0 }
+      playbackRef.current = { queue: makeMockRunEvents(getExecutionSpec(scenarioId), 'https://example.com/consent'), i: 0 }
       pumpPlayback()
       return
     }
@@ -659,7 +659,7 @@ function AppInner() {
     if (transport === 'mock') {
       // Simulate the runner continuing after consent.
       clearTimer()
-      playbackRef.current = { queue: makeMockConsentCompletionEvents(), i: 0 }
+      playbackRef.current = { queue: makeMockConsentCompletionEvents(getExecutionSpec(scenarioId)), i: 0 }
       pumpPlayback()
     }
   }
@@ -793,14 +793,14 @@ function AppInner() {
           </div>
           <div className="panelBody">
             <div className="timeline">
-              <div className="timelineGroup">Discovery</div>
-              {flow.steps
-                .filter((s) => s.id === 'step-wallet-resolve')
-                .map((step) => {
-                  const st = statusesByStepId[step.id] ?? 'idle'
-                  return (
+              {flow.steps.map((step, idx) => {
+                const st = statusesByStepId[step.id] ?? 'idle'
+                const prevGroup = idx > 0 ? flow.steps[idx - 1]?.group : undefined
+                const showGroup = step.group && step.group !== prevGroup
+                return (
+                  <React.Fragment key={step.id}>
+                    {showGroup ? <div className="timelineGroup">{step.group}</div> : null}
                     <div
-                      key={step.id}
                       className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
                       onClick={() => selectStep(step.id)}
                     >
@@ -809,70 +809,9 @@ function AppInner() {
                         <div className={pillClass(st)}>{st}</div>
                       </div>
                     </div>
-                  )
-                })}
-
-              <div className="timelineGroup">Incoming payment</div>
-              {flow.steps
-                .filter((s) => s.id === 'step-grant-incoming' || s.id === 'step-incoming-payment')
-                .map((step) => {
-                  const st = statusesByStepId[step.id] ?? 'idle'
-                  return (
-                    <div
-                      key={step.id}
-                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
-                      onClick={() => selectStep(step.id)}
-                    >
-                      <div className="title">
-                        <div>{step.title}</div>
-                        <div className={pillClass(st)}>{st}</div>
-                      </div>
-                    </div>
-                  )
-                })}
-
-              <div className="timelineGroup">Quote</div>
-              {flow.steps
-                .filter((s) => s.id === 'step-grant-quote' || s.id === 'step-quote')
-                .map((step) => {
-                  const st = statusesByStepId[step.id] ?? 'idle'
-                  return (
-                    <div
-                      key={step.id}
-                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
-                      onClick={() => selectStep(step.id)}
-                    >
-                      <div className="title">
-                        <div>{step.title}</div>
-                        <div className={pillClass(st)}>{st}</div>
-                      </div>
-                    </div>
-                  )
-                })}
-
-              <div className="timelineGroup">Outgoing payment</div>
-              {flow.steps
-                .filter(
-                  (s) =>
-                    s.id === 'step-grant-outgoing-interactive' ||
-                    s.id === 'step-grant-outgoing-continue' ||
-                    s.id === 'step-outgoing-payment'
+                  </React.Fragment>
                 )
-                .map((step) => {
-                  const st = statusesByStepId[step.id] ?? 'idle'
-                  return (
-                    <div
-                      key={step.id}
-                      className={`step ${selectedStepId === step.id ? 'selected' : ''}`}
-                      onClick={() => selectStep(step.id)}
-                    >
-                      <div className="title">
-                        <div>{step.title}</div>
-                        <div className={pillClass(st)}>{st}</div>
-                      </div>
-                    </div>
-                  )
-                })}
+              })}
             </div>
             </div>
         </div>
@@ -1051,7 +990,7 @@ function AppInner() {
                         <input value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="(from your *_KEY_ID.txt)" />
                       </div>
                       <div className="field">
-                        <label>Private key file (picker)</label>
+                        <label>Private key File</label>
                         <input
                           type="file"
                           accept=".key,.pem,.txt"
@@ -1064,14 +1003,14 @@ function AppInner() {
                         />
                       </div>
                       <div className="field" style={{ gridColumn: '1 / -1' }}>
-                        <label>Private key path (local runner)</label>
+                        <label>Private Key Path</label>
                         <input value={privateKeyPath} onChange={(e) => setPrivateKeyPath(e.target.value)} placeholder="C:\\Users\\...\\USD_KEY.key" />
                         <div className="subtleHelp">
                           Selected: <strong>{privateKeyHint || '(none)'}</strong>
                         </div>
                       </div>
                     </div>
-                    <div className="hint">This UI never reads key contents. The local runner reads the key from the path.</div>
+                    <div className="hint">Use an absolute path for testnet runs.</div>
                   </CollapsibleCard>
 
                   <CollapsibleCard

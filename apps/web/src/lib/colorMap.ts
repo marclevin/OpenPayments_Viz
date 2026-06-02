@@ -9,8 +9,9 @@ export type EntityColorVar =
 
 export function getEntityColorVar(label: string, kind?: string): EntityColorVar {
   const l = label.toLowerCase()
-  if (l.includes('sender') && l.includes('wallet')) return '--entitySenderWallet'
-  if (l.includes('receiver') && l.includes('wallet')) return '--entityReceiverWallet'
+  // Payer-side wallets (sender / customer) share one color; payee-side (receiver / service provider) another.
+  if (l.includes('wallet') && (l.includes('sender') || l.includes('customer'))) return '--entitySenderWallet'
+  if (l.includes('wallet') && (l.includes('receiver') || l.includes('provider'))) return '--entityReceiverWallet'
   if (l === 'client' || kind === 'client') return '--entityClient'
   if (l.includes('auth') || kind === 'authServer') return '--entityAuthServer'
   if (l.includes('resource') || kind === 'resourceServer') return '--entityResourceServer'
@@ -28,7 +29,9 @@ export function highlightEntities(text: string): Array<string | { t: string; var
   const tokens: Array<{ match: RegExp; varName: EntityColorVar }> = [
     { match: /\bClient\b/g, varName: '--entityClient' },
     { match: /\bSender Wallet\b/g, varName: '--entitySenderWallet' },
+    { match: /\bCustomer Wallet\b/g, varName: '--entitySenderWallet' },
     { match: /\bReceiver Wallet\b/g, varName: '--entityReceiverWallet' },
+    { match: /\bService Provider Wallet\b/g, varName: '--entityReceiverWallet' },
     { match: /\bAuth Server\b/g, varName: '--entityAuthServer' },
     { match: /\bResource Server\b/g, varName: '--entityResourceServer' },
     { match: /\bIncoming Payment\b/g, varName: '--entityPayment' },

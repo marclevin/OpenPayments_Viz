@@ -102,7 +102,7 @@ export function explainStep(
 ): ExplainSegment[] {
   const out: ExplainSegment[] = []
   if (step.description) out.push({ label: 'What happens', body: step.description })
-  if (step.id === 'step-grant-outgoing-interactive' && consentNeeded) {
+  if (step.kind === 'grant.interactive_required' && consentNeeded) {
     out.push({
       label: 'Consent',
       body: 'This step needs your consent: open the consent link, approve, and the run continues automatically.',

@@ -76,7 +76,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       kind: 'request',
       source: 'client',
       target: 'senderWallet',
-      label: 'GET /.well-known',
+      label: 'GET wallet address',
       stepId: 'step-wallet-resolve',
       description:
         'The Client performs an unauthenticated GET on the Sender Wallet URL. The response is the wallet’s public details: its Auth Server, Resource Server, asset code, and asset scale.',
@@ -86,7 +86,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       kind: 'request',
       source: 'client',
       target: 'receiverWallet',
-      label: 'GET /.well-known',
+      label: 'GET wallet address',
       stepId: 'step-wallet-resolve',
       description:
         'The same public lookup against the Receiver Wallet URL, telling the Client where to create the incoming-payment and which servers the recipient uses.',
@@ -204,6 +204,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-wallet-resolve',
       kind: 'wallet.resolve',
       title: 'Resolve wallet addresses',
+      group: 'Discovery',
       involvedNodeIds: ['client', 'senderWallet', 'receiverWallet'],
       involvedEdgeIds: ['e-discovery-s', 'e-discovery-r'],
       description:
@@ -221,6 +222,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-grant-incoming',
       kind: 'grant.request',
       title: 'Grant for incoming payment',
+      group: 'Incoming payment',
       involvedNodeIds: ['client', 'auth'],
       involvedEdgeIds: ['e-grant-in'],
       description:
@@ -236,6 +238,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-incoming-payment',
       kind: 'incomingPayment.create',
       title: 'Create incoming payment',
+      group: 'Incoming payment',
       involvedNodeIds: ['client', 'resource', 'incomingPayment'],
       involvedEdgeIds: ['e-ip', 'e-rel-ip'],
       description:
@@ -253,6 +256,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-grant-quote',
       kind: 'grant.request',
       title: 'Grant for quote',
+      group: 'Quote',
       involvedNodeIds: ['client', 'auth'],
       involvedEdgeIds: ['e-grant-quote'],
       description:
@@ -268,6 +272,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-quote',
       kind: 'quote.create',
       title: 'Create quote',
+      group: 'Quote',
       involvedNodeIds: ['client', 'resource', 'quote'],
       involvedEdgeIds: ['e-quote', 'e-rel-q'],
       description:
@@ -285,6 +290,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-grant-outgoing-interactive',
       kind: 'grant.interactive_required',
       title: 'Interactive grant for outgoing payment',
+      group: 'Outgoing payment',
       involvedNodeIds: ['client', 'auth'],
       involvedEdgeIds: ['e-grant-out', 'e-consent'],
       description:
@@ -300,6 +306,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-grant-outgoing-continue',
       kind: 'grant.continue',
       title: 'Continue grant after consent',
+      group: 'Outgoing payment',
       involvedNodeIds: ['client', 'auth'],
       involvedEdgeIds: ['e-grant-cont'],
       description:
@@ -315,6 +322,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'step-outgoing-payment',
       kind: 'outgoingPayment.create',
       title: 'Create outgoing payment',
+      group: 'Outgoing payment',
       involvedNodeIds: ['client', 'resource', 'outgoingPayment'],
       involvedEdgeIds: ['e-op', 'e-rel-op'],
       description:

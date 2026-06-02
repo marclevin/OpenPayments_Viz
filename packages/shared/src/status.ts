@@ -30,6 +30,13 @@ export function getStepStatusFromEvents(stepId: StepId, events: RunnerEvent[]): 
   ]
   if (relevant.some((e) => (successTypes as string[]).includes(e.type))) return 'success'
 
+  // An informational step (e.g. a "recurring billing" explainer) only ever receives
+  // runner.log events. Show it active while the run is in flight, and success once the
+  // run has completed.
+  if (relevant.every((e) => e.type === 'runner.log')) {
+    return events.some((e) => e.type === 'run.completed') ? 'success' : 'active'
+  }
+
   const activeTypes: RunnerEvent['type'][] = ['grant.requested', 'grant.interactive_required', 'runner.log']
   if (relevant.some((e) => (activeTypes as string[]).includes(e.type))) return 'active'
 

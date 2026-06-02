@@ -1,52 +1,56 @@
-import type { RunnerEvent } from '@opviz/shared'
+import type { FlowExecutionSpec, RunnerEvent } from '@opviz/shared'
 
 function nowIso() {
   return new Date().toISOString()
 }
 
 const RUN_ID = 'mock'
+const AUTH = 'https://auth.interledger-test.dev'
+const RESOURCE = 'https://ilp.interledger-test.dev'
 
-// Fully-typed mock trace mirroring the runner's event shapes, with realistic live
-// data so the narration's "live values" render without a real run.
-export function makeMockRunEvents(consentUrl: string): RunnerEvent[] {
+// Fully-typed mock trace driven by a scenario's execution spec, with realistic live data so
+// the timeline/graph animate identically to a real run. Uses the spec's step ids and amount,
+// so any scenario sharing the canonical Open Payments sequence works without bespoke mock code.
+export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): RunnerEvent[] {
+  const { steps, incomingAmount } = spec
   return [
     { id: 'e1', runId: RUN_ID, ts: nowIso(), type: 'run.started', level: 'info' },
     {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'walletAddress.resolved',
-      stepId: 'step-wallet-resolve',
+      stepId: steps.walletResolve,
       level: 'info',
       wallet: 'sending',
-      walletAddressUrl: 'https://ilp.interledger-test.dev/usdtest',
-      authServer: 'https://auth.interledger-test.dev',
-      resourceServer: 'https://ilp.interledger-test.dev',
-      id: 'https://ilp.interledger-test.dev/usdtest',
-      assetCode: 'USD',
-      assetScale: 2,
+      walletAddressUrl: `${RESOURCE}/customer`,
+      authServer: AUTH,
+      resourceServer: RESOURCE,
+      id: `${RESOURCE}/customer`,
+      assetCode: incomingAmount.assetCode,
+      assetScale: incomingAmount.assetScale,
     },
     {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'walletAddress.resolved',
-      stepId: 'step-wallet-resolve',
+      stepId: steps.walletResolve,
       level: 'info',
       wallet: 'receiving',
-      walletAddressUrl: 'https://ilp.interledger-test.dev/a23bbe02',
-      authServer: 'https://auth.interledger-test.dev',
-      resourceServer: 'https://ilp.interledger-test.dev',
-      id: 'https://ilp.interledger-test.dev/a23bbe02',
-      assetCode: 'USD',
-      assetScale: 2,
+      walletAddressUrl: `${RESOURCE}/service-provider`,
+      authServer: AUTH,
+      resourceServer: RESOURCE,
+      id: `${RESOURCE}/service-provider`,
+      assetCode: incomingAmount.assetCode,
+      assetScale: incomingAmount.assetScale,
     },
     {
       id: 'e3',
       runId: RUN_ID,
       ts: nowIso(),
       type: 'grant.requested',
-      stepId: 'step-grant-incoming',
+      stepId: steps.incomingGrant,
       level: 'info',
-      authServer: 'https://auth.interledger-test.dev',
+      authServer: AUTH,
       access: [{ type: 'incoming-payment', actions: ['read', 'complete', 'create'] }],
     },
     {
@@ -54,26 +58,26 @@ export function makeMockRunEvents(consentUrl: string): RunnerEvent[] {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'grant.finalized',
-      stepId: 'step-grant-incoming',
+      stepId: steps.incomingGrant,
       level: 'info',
-      authServer: 'https://auth.interledger-test.dev',
+      authServer: AUTH,
     },
     {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'incomingPayment.created',
-      stepId: 'step-incoming-payment',
+      stepId: steps.incomingPayment,
       level: 'info',
-      id: 'https://ilp.interledger-test.dev/incoming-payments/ip_123',
+      id: `${RESOURCE}/incoming-payments/ip_123`,
     },
     {
       id: 'e5',
       runId: RUN_ID,
       ts: nowIso(),
       type: 'grant.requested',
-      stepId: 'step-grant-quote',
+      stepId: steps.quoteGrant,
       level: 'info',
-      authServer: 'https://auth.interledger-test.dev',
+      authServer: AUTH,
       access: [{ type: 'quote', actions: ['create', 'read'] }],
     },
     {
@@ -81,52 +85,66 @@ export function makeMockRunEvents(consentUrl: string): RunnerEvent[] {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'grant.finalized',
-      stepId: 'step-grant-quote',
+      stepId: steps.quoteGrant,
       level: 'info',
-      authServer: 'https://auth.interledger-test.dev',
+      authServer: AUTH,
     },
     {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'quote.created',
-      stepId: 'step-quote',
+      stepId: steps.quote,
       level: 'info',
-      id: 'https://ilp.interledger-test.dev/quotes/q_123',
-      debitAmount: { assetCode: 'USD', assetScale: 2, value: '1000' },
+      id: `${RESOURCE}/quotes/q_123`,
+      debitAmount: { assetCode: incomingAmount.assetCode, assetScale: incomingAmount.assetScale, value: incomingAmount.value },
     },
     {
       id: 'e7',
       runId: RUN_ID,
       ts: nowIso(),
       type: 'grant.interactive_required',
-      stepId: 'step-grant-outgoing-interactive',
+      stepId: steps.outgoingGrantInteractive,
       level: 'info',
-      authServer: 'https://auth.interledger-test.dev',
+      authServer: AUTH,
       redirectUrl: consentUrl,
       callbackUrl: 'http://localhost:3999/callback',
     },
   ]
 }
 
-export function makeMockConsentCompletionEvents(): RunnerEvent[] {
-  return [
+export function makeMockConsentCompletionEvents(spec: FlowExecutionSpec): RunnerEvent[] {
+  const { steps } = spec
+  const events: RunnerEvent[] = [
     {
       id: 'e8',
       runId: RUN_ID,
       ts: nowIso(),
       type: 'grant.continued',
-      stepId: 'step-grant-outgoing-continue',
+      stepId: steps.outgoingGrantContinue,
       level: 'info',
-      authServer: 'https://auth.interledger-test.dev',
+      authServer: AUTH,
     },
     {
       runId: RUN_ID,
       ts: nowIso(),
       type: 'outgoingPayment.created',
-      stepId: 'step-outgoing-payment',
+      stepId: steps.outgoingPayment,
       level: 'info',
-      id: 'https://ilp.interledger-test.dev/outgoing-payments/op_123',
+      id: `${RESOURCE}/outgoing-payments/op_123`,
     },
-    { id: 'e10', runId: RUN_ID, ts: nowIso(), type: 'run.completed', level: 'info' },
   ]
+  // Recurring scenarios: light up the informational explainer step at the end.
+  if (steps.recurring) {
+    events.push({
+      id: 'e9b',
+      runId: RUN_ID,
+      ts: nowIso(),
+      type: 'runner.log',
+      stepId: steps.recurring,
+      level: 'info',
+      message: 'Recurring authorization active: the remaining payments are pre-approved on this grant.',
+    })
+  }
+  events.push({ id: 'e10', runId: RUN_ID, ts: nowIso(), type: 'run.completed', level: 'info' })
+  return events
 }

@@ -45,8 +45,15 @@ export function FlowNode({ data }: NodeProps<FlowNodeData>) {
       className={`flowNodeCard status-${data.status ?? 'idle'}${data.selected ? ' is-selected' : ''}`}
       style={{
         borderRadius: 16,
-        border: `1px solid ${data.selected ? 'rgba(0,59,92,0.45)' : 'rgba(15,23,42,0.16)'}`,
-        borderLeft: `5px solid ${entityColor}`,
+        // All-longhand border props (no `border` shorthand) so the accent left edge doesn't
+        // collide with the shorthand on rerender.
+        borderStyle: 'solid',
+        borderColor: data.selected ? 'rgba(0,59,92,0.45)' : 'rgba(15,23,42,0.16)',
+        borderTopWidth: 1,
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderLeftWidth: 5,
+        borderLeftColor: entityColor,
         background: 'rgba(255,255,255,0.94)',
         overflow: 'hidden',
         minWidth: 168,
