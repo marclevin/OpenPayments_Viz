@@ -17,5 +17,10 @@ export default defineConfig({
       allow: ['..', '../..'],
     },
   },
+  // Serve the optimized production build (`npm start`) on the same port as dev, so the
+  // runner's default CORS origin and consent-redirect URL work without any env overrides.
+  preview: {
+    port: 5173,
+  },
 })
 

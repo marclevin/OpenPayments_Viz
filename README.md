@@ -39,9 +39,26 @@ npm install
 
 | Command | What it starts | Use for |
 | --- | --- | --- |
-| `npm run dev` / `npm run dev:web` | Web UI only (`http://localhost:5173`) | **Mocked** mode |
+| `npm run dev` / `npm run dev:web` | Web UI only, with hot reload (`http://localhost:5173`) | **Mocked** mode, development |
 | `npm run dev:runner` | Runner only (`http://localhost:3344`) | — |
-| `npm run dev:all` | **Both** runner + web | **TestNet** mode |
+| `npm run dev:all` | **Both** runner + web (dev) | **TestNet** mode, development |
+| `npm run serve` | Builds, then runs **both** optimized | Running locally (see below) |
+| `npm start` | Runs **both** optimized (assumes you've built) | Re-running after a build |
+
+### Running the optimized build locally
+
+```bash
+npm run serve
+```
+
+This builds the production web bundle and then starts both processes:
+
+- **Runner** on `http://localhost:3344` (run with `tsx`).
+- **Web UI** (the optimized Vite build, served by `vite preview`) on `http://localhost:5173`
+  — the same port as dev, so the runner's CORS and consent-redirect defaults work unchanged.
+
+Open `http://localhost:5173`. Use `npm start` on subsequent runs to skip the rebuild. Stop both
+with `Ctrl+C`.
 
 ### Mocked mode (no setup)
 

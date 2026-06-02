@@ -21,7 +21,15 @@
       "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"port clear\")",
       "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"runner stopped\")",
       "Bash(git rm *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(timeout 6 node apps/runner/dist/index.js)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(timeout 6 npx tsx apps/runner/src/index.ts)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3344,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; '\\\\''ports cleared'\\\\''')",
+      "Bash(curl -s http://localhost:3344/health)",
+      "Bash(curl -s -o /dev/null -w \"http %{http_code}\\\\n\" http://localhost:5173/)",
+      "Read(//tmp/**)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3344,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; '\\\\''stopped'\\\\''')"
     ]
   }
 }

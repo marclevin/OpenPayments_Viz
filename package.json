@@ -10,7 +10,9 @@
     "dev:web": "npm run dev -w @opviz/web",
     "dev:runner": "npm run dev -w @opviz/runner",
     "dev:all": "concurrently -n runner,web -c cyan,magenta \"npm run dev -w @opviz/runner\" \"npm run dev -w @opviz/web\"",
-    "build": "npm run build -w @opviz/runner && npm run build -w @opviz/web"
+    "build": "npm run build -w @opviz/runner && npm run build -w @opviz/web",
+    "start": "concurrently -n runner,web -c cyan,magenta \"npm run start -w @opviz/runner\" \"npm run start -w @opviz/web\"",
+    "serve": "npm run build && npm run start"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
