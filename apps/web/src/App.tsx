@@ -9,7 +9,7 @@ import { createRunnerClient, type RunnerConfig } from './lib/eventStream'
 import { type ExplainSegment, explainEdge, explainNode, explainStep, nodeStatus } from './lib/explain'
 import { makeMockConsentCompletionEvents, makeMockRunEvents } from './lib/mockRun'
 
-type TransportMode = 'mock' | 'sse' | 'ws'
+type TransportMode = 'mock' | 'sse'
 type BottomTab = 'inspector' | 'setup'
 type Selection = { kind: 'node' | 'edge' | 'step'; id: string } | null
 
@@ -153,7 +153,6 @@ function AppInner() {
   const flow = useMemo(() => getScenarioById(scenarioId) ?? scenarios[0]!, [scenarioId])
   const [keyId, setKeyId] = useState('')
   const [privateKeyPath, setPrivateKeyPath] = useState('')
-  const [privateKeyHint, setPrivateKeyHint] = useState('')
   const [clientWalletAddressUrl, setClientWalletAddressUrl] = useState('')
   const [sendingWalletAddressUrl, setSendingWalletAddressUrl] = useState('')
   const [receivingWalletAddressUrl, setReceivingWalletAddressUrl] = useState('')
@@ -170,7 +169,6 @@ function AppInner() {
     callbackPort: number
     baseUrl: string
     uiBaseUrl: string
-    privateKeyHint?: string
     updatedAt: string
   }
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([])
@@ -283,6 +281,10 @@ function AppInner() {
   const clientRef = useRef<ReturnType<typeof createRunnerClient> | null>(null)
   const timerRef = useRef<number | null>(null)
   const didMountScenarioRef = useRef(false)
+  // True once the user has clicked a step/node/edge: stops the explanation panel from
+  // auto-following the running step so their manual selection sticks. Re-armed on Start
+  // and on scenario switch.
+  const userPinnedRef = useRef(false)
 
   // Mock playback driver: refs so the running loop always reads the latest pause/speed
   // (avoids the stale-closure bug where pausing/speed changes were ignored mid-run).
@@ -316,6 +318,7 @@ function AppInner() {
     setIsRunning(false)
     setIsPaused(false)
     isPausedRef.current = false
+    userPinnedRef.current = false
     const first = flow.steps[0]?.id ?? ''
     setSelectedStepId(first)
     setSelection(first ? { kind: 'step', id: first } : null)
@@ -366,7 +369,6 @@ function AppInner() {
     setCallbackPort(s.callbackPort)
     setBaseUrl(s.baseUrl)
     setUiBaseUrl(s.uiBaseUrl)
-    setPrivateKeyHint(s.privateKeyHint ?? '')
   }
 
   function buildScenario(id: string, name: string): SavedScenario {
@@ -380,7 +382,6 @@ function AppInner() {
       callbackPort,
       baseUrl,
       uiBaseUrl,
-      privateKeyHint: privateKeyHint || undefined,
       updatedAt: new Date().toISOString(),
     }
   }
@@ -548,13 +549,18 @@ function AppInner() {
   }
 
   // Timeline click: moves BOTH the timeline highlight and the explanation/focus.
+  // A manual click pins the selection so auto-follow won't override it mid-run.
   function selectStep(id: string) {
+    userPinnedRef.current = true
     setSelectedStepId(id)
     setSelection({ kind: 'step', id })
   }
 
   function appendEvent(e: RunnerEvent) {
-    setEvents((prev) => [...prev, e])
+    // Ignore duplicates: the runner replays the current run's buffer to every new SSE
+    // connection, so a reconnect (without a page reload) could re-deliver events we already
+    // have. Event ids are unique, so de-dupe on them.
+    setEvents((prev) => (prev.some((x) => x.id === e.id) ? prev : [...prev, e]))
     if (e.type === 'run.completed' || e.type === 'runner.error') {
       setIsRunning(false)
       setIsPaused(false)
@@ -562,16 +568,19 @@ function AppInner() {
     }
     if (e.stepId) {
       const sid = e.stepId
-      setSelectedStepId((curr) => curr || sid)
-      // Until the user clicks something, follow the running step in the explanation panel.
-      setSelection((curr) => curr ?? { kind: 'step', id: sid })
+      // Until the user clicks something, follow the running step in the timeline +
+      // explanation panel. Once they pin a selection, leave it alone.
+      if (!userPinnedRef.current) {
+        setSelectedStepId(sid)
+        setSelection({ kind: 'step', id: sid })
+      }
     }
   }
 
   function connectToRunner() {
     if (transport === 'mock') return
     setConnected('disconnected')
-    const client = createRunnerClient(baseUrl, transport === 'ws' ? 'ws' : 'sse')
+    const client = createRunnerClient(baseUrl)
     clientRef.current = client
     client.connect({
       onConnected: () => setConnected('connected'),
@@ -591,6 +600,8 @@ function AppInner() {
     setEvents([])
     setIsPaused(false)
     isPausedRef.current = false
+    // Re-arm auto-follow: a fresh run should track the running step until the user clicks.
+    userPinnedRef.current = false
     clearTimer()
 
     if (transport === 'mock') {
@@ -654,14 +665,17 @@ function AppInner() {
   function openConsent() {
     const url = lastRedirectUrl
     if (!url) return
-    window.open(url, '_blank', 'noopener,noreferrer')
 
     if (transport === 'mock') {
-      // Simulate the runner continuing after consent.
+      // Mock mode has no real auth server to visit — don't open an external tab. Just simulate
+      // the user approving and the runner continuing the grant.
       clearTimer()
       playbackRef.current = { queue: makeMockConsentCompletionEvents(getExecutionSpec(scenarioId)), i: 0 }
       pumpPlayback()
+      return
     }
+
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   async function togglePause() {
@@ -744,20 +758,22 @@ function AppInner() {
             </button>
           </div>
 
-          <div className="speed">
-            <span className="speedLabel">Speed</span>
-            <div className="speedPresets">
-              {[0.5, 1, 2, 3].map((s) => (
-                <button
-                  key={s}
-                  className={`speedPreset ${speed === s ? 'active' : ''}`}
-                  onClick={() => setSpeed(s)}
-                >
-                  {s}×
-                </button>
-              ))}
+          {transport === 'mock' ? (
+            <div className="speed">
+              <span className="speedLabel">Speed</span>
+              <div className="speedPresets">
+                {[0.5, 1, 2, 3].map((s) => (
+                  <button
+                    key={s}
+                    className={`speedPreset ${speed === s ? 'active' : ''}`}
+                    onClick={() => setSpeed(s)}
+                  >
+                    {s}×
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         <div className="right">
@@ -833,8 +849,14 @@ function AppInner() {
                 nodeTypes={nodeTypes}
                 fitView
                 proOptions={{ hideAttribution: true }}
-                onNodeClick={(_, n) => setSelection({ kind: 'node', id: String(n.id) })}
-                onEdgeClick={(_, ed) => setSelection({ kind: 'edge', id: String(ed.id) })}
+                onNodeClick={(_, n) => {
+                  userPinnedRef.current = true
+                  setSelection({ kind: 'node', id: String(n.id) })
+                }}
+                onEdgeClick={(_, ed) => {
+                  userPinnedRef.current = true
+                  setSelection({ kind: 'edge', id: String(ed.id) })
+                }}
               >
                 <Background color="rgba(0,0,0,0.06)" gap={24} />
               </ReactFlow>
@@ -989,28 +1011,16 @@ function AppInner() {
                         <label>Key ID</label>
                         <input value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="(from your *_KEY_ID.txt)" />
                       </div>
-                      <div className="field">
-                        <label>Private key File</label>
-                        <input
-                          type="file"
-                          accept=".key,.pem,.txt"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0]
-                            if (!f) return
-                            setPrivateKeyHint(f.name)
-                            if (!privateKeyPath) setPrivateKeyPath(f.name)
-                          }}
-                        />
-                      </div>
                       <div className="field" style={{ gridColumn: '1 / -1' }}>
-                        <label>Private Key Path</label>
+                        <label>Private key path (on the runner machine)</label>
                         <input value={privateKeyPath} onChange={(e) => setPrivateKeyPath(e.target.value)} placeholder="C:\\Users\\...\\USD_KEY.key" />
-                        <div className="subtleHelp">
-                          Selected: <strong>{privateKeyHint || '(none)'}</strong>
-                        </div>
                       </div>
                     </div>
-                    <div className="hint">Use an absolute path for testnet runs.</div>
+                    <div className="hint">
+                      The runner reads the private key from this path on disk — the key file is
+                      never uploaded to the browser. Use an <strong>absolute path</strong> to the
+                      <span className="mono"> .key</span> file on the machine running the runner.
+                    </div>
                   </CollapsibleCard>
 
                   <CollapsibleCard

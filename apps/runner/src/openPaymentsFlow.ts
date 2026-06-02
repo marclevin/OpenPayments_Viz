@@ -46,7 +46,10 @@ function nowIso() {
   return new Date().toISOString()
 }
 
-function newEventBase(runId: RunId, type: RunnerEvent['type'], stepId?: StepId) {
+// Generic in the event type so the literal (e.g. 'grant.finalized') is preserved on the
+// returned object. Without this, `type` widens to the full union and the spread result no
+// longer matches the discriminated RunnerEvent union at the emit() call sites.
+function newEventBase<T extends RunnerEvent['type']>(runId: RunId, type: T, stepId?: StepId) {
   return {
     id: crypto.randomUUID(),
     runId,
@@ -68,6 +71,11 @@ function buildUiConsentRedirectUrl(uiBaseUrl: string, runId: RunId) {
   return url.toString()
 }
 
+// How long the runner waits for the user to complete the interactive consent before giving
+// up. Without a bound, an abandoned consent leaves the run hanging forever and keeps the
+// callback port bound (so the next run hits EADDRINUSE). Overridable via env for slow setups.
+const CONSENT_TIMEOUT_MS = Number(process.env.CONSENT_TIMEOUT_MS ?? 180000)
+
 async function waitForInteractRef(
   runId: RunId,
   callbackPort: number,
@@ -78,23 +86,53 @@ async function waitForInteractRef(
     let server: ReturnType<typeof app.listen> | undefined
     const app = express()
     let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // Close the callback server and clear the timeout exactly once, on every exit path,
+    // so the port is always released.
+    function cleanup() {
+      if (timer) clearTimeout(timer)
+      timer = undefined
+      server?.close()
+      server = undefined
+    }
+
+    function settleResolve(ref: string) {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(ref)
+    }
+
+    function settleReject(err: unknown) {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(err)
+    }
+
+    timer = setTimeout(() => {
+      settleReject(
+        new Error(
+          `Consent timed out after ${Math.round(
+            CONSENT_TIMEOUT_MS / 1000
+          )}s. Open the consent link and approve, then run again.`
+        )
+      )
+    }, CONSENT_TIMEOUT_MS)
 
     const handler: RequestHandler = (req, res) => {
       const interactRefRaw = req.query['interact_ref']
-      const interactRef =
+      const interactRef: string | undefined =
         typeof interactRefRaw === 'string'
           ? interactRefRaw
-          : Array.isArray(interactRefRaw)
+          : Array.isArray(interactRefRaw) && typeof interactRefRaw[0] === 'string'
             ? interactRefRaw[0]
             : undefined
 
       if (!interactRef) {
         res.status(400).type('text/plain').send('Missing interact_ref in callback query')
-        if (!settled) {
-          settled = true
-          reject(new Error('Missing interact_ref in callback query'))
-        }
-        res.on('finish', () => server?.close())
+        settleReject(new Error('Missing interact_ref in callback query'))
         return
       }
 
@@ -104,22 +142,15 @@ async function waitForInteractRef(
         redirectTo = buildUiConsentRedirectUrl(uiBaseUrl, runId)
       } catch (err) {
         res.status(500).type('text/plain').send('Unable to build UI redirect URL')
-        if (!settled) {
-          settled = true
-          reject(err)
-        }
-        res.on('finish', () => server?.close())
+        settleReject(err)
         return
       }
 
       res.redirect(302, redirectTo)
-
       onInteractRef(interactRef)
-      if (!settled) {
-        settled = true
-        resolve(interactRef)
-      }
-      res.on('finish', () => server?.close())
+      // Resolve after the response has flushed so the browser still gets its redirect even
+      // though we immediately close the server.
+      res.on('finish', () => settleResolve(interactRef))
     }
 
     app.get('/', handler)
@@ -127,10 +158,10 @@ async function waitForInteractRef(
 
     server = app.listen(callbackPort).on('error', (err: any) => {
       if (err?.code === 'EADDRINUSE') {
-        reject(new Error(`Callback port ${callbackPort} is already in use`))
+        settleReject(new Error(`Callback port ${callbackPort} is already in use`))
         return
       }
-      reject(err)
+      settleReject(err)
     })
   })
 }
@@ -164,7 +195,12 @@ export async function runOpenPaymentsFlow(
   const callbackUrl = `http://localhost:${callbackPort}/callback`
   const uiBaseUrl = config.uiBaseUrl ?? process.env.RUNNER_UI_URL ?? 'http://localhost:5173/'
 
+  // Tracks the phase currently in flight so a thrown error is tagged with the step it
+  // belongs to — that's what turns the failing step red in the UI timeline/graph.
+  let currentStepId: StepId | undefined
+
   try {
+    currentStepId = spec.steps.walletResolve
     const client = await createAuthenticatedClient({
       walletAddressUrl: config.clientWalletAddressUrl,
       keyId: config.keyId,
@@ -181,7 +217,7 @@ export async function runOpenPaymentsFlow(
       walletAddressUrl: config.sendingWalletAddressUrl,
       authServer: sendingWalletAddress.authServer,
       resourceServer: sendingWalletAddress.resourceServer,
-      id: sendingWalletAddress.id,
+      resourceId: sendingWalletAddress.id,
       assetCode: sendingWalletAddress.assetCode,
       assetScale: sendingWalletAddress.assetScale
     })
@@ -196,11 +232,12 @@ export async function runOpenPaymentsFlow(
       walletAddressUrl: config.receivingWalletAddressUrl,
       authServer: receivingWalletAddress.authServer,
       resourceServer: receivingWalletAddress.resourceServer,
-      id: receivingWalletAddress.id,
+      resourceId: receivingWalletAddress.id,
       assetCode: receivingWalletAddress.assetCode,
       assetScale: receivingWalletAddress.assetScale
     })
 
+    currentStepId = spec.steps.incomingGrant
     emit({
       ...newEventBase(runId, 'grant.requested', spec.steps.incomingGrant),
       authServer: receivingWalletAddress.authServer,
@@ -233,6 +270,7 @@ export async function runOpenPaymentsFlow(
       authServer: receivingWalletAddress.authServer
     })
 
+    currentStepId = spec.steps.incomingPayment
     await waitIfPaused()
     const incomingPayment = await client.incomingPayment.create(
       {
@@ -253,9 +291,10 @@ export async function runOpenPaymentsFlow(
     )
     emit({
       ...newEventBase(runId, 'incomingPayment.created', spec.steps.incomingPayment),
-      id: incomingPayment.id
+      resourceId: incomingPayment.id
     })
 
+    currentStepId = spec.steps.quoteGrant
     emit({
       ...newEventBase(runId, 'grant.requested', spec.steps.quoteGrant),
       authServer: sendingWalletAddress.authServer,
@@ -287,6 +326,7 @@ export async function runOpenPaymentsFlow(
       authServer: sendingWalletAddress.authServer
     })
 
+    currentStepId = spec.steps.quote
     await waitIfPaused()
     const quote = await client.quote.create(
       {
@@ -301,10 +341,11 @@ export async function runOpenPaymentsFlow(
     )
     emit({
       ...newEventBase(runId, 'quote.created', spec.steps.quote),
-      id: quote.id,
+      resourceId: quote.id,
       debitAmount: quote.debitAmount
     })
 
+    currentStepId = spec.steps.outgoingGrantInteractive
     emit({
       ...newEventBase(runId, 'grant.requested', spec.steps.outgoingGrantInteractive),
       authServer: sendingWalletAddress.authServer,
@@ -349,7 +390,9 @@ export async function runOpenPaymentsFlow(
       }
     )
 
-    if (!outgoingPaymentGrant?.interact?.redirect) {
+    // Narrow to a pending (interactive) grant so `.interact` and `.continue` are typed — a
+    // finalized grant here would mean the auth server didn't require consent, which is a bug.
+    if (!isPendingGrant(outgoingPaymentGrant) || !outgoingPaymentGrant.interact?.redirect) {
       throw new Error('Expected outgoing payment grant to include interact.redirect')
     }
 
@@ -368,6 +411,7 @@ export async function runOpenPaymentsFlow(
       })
     })
 
+    currentStepId = spec.steps.outgoingGrantContinue
     await waitIfPaused()
     let finalizedOutgoingPaymentGrant
     try {
@@ -397,6 +441,7 @@ export async function runOpenPaymentsFlow(
       authServer: sendingWalletAddress.authServer
     })
 
+    currentStepId = spec.steps.outgoingPayment
     await waitIfPaused()
     const outgoingPayment = await client.outgoingPayment.create(
       {
@@ -414,7 +459,7 @@ export async function runOpenPaymentsFlow(
 
     emit({
       ...newEventBase(runId, 'outgoingPayment.created', spec.steps.outgoingPayment),
-      id: outgoingPayment.id
+      resourceId: outgoingPayment.id
     })
 
     // Recurring scenarios: mark the informational explainer step as done.
@@ -427,7 +472,7 @@ export async function runOpenPaymentsFlow(
 
     emit({ ...newEventBase(runId, 'run.completed') })
   } catch (err) {
-    emit(toRunnerError(runId, undefined, err))
+    emit(toRunnerError(runId, currentStepId, err))
   }
 }
 

@@ -37,6 +37,9 @@ app.use(express.json({ limit: '256kb' }))
 const port = Number(process.env.PORT ?? 3344)
 const sse = new SseHub()
 let paused = false
+// The run currently in flight. Pause/resume control events are tagged with this so they
+// share the run's id instead of inventing an unrelated one.
+let activeRunId: RunId | undefined
 
 function nowIso() {
   return new Date().toISOString()
@@ -106,6 +109,9 @@ app.post('/run', (req, res) => {
   }
 
   const runId: RunId = crypto.randomUUID()
+  // A new run always starts un-paused: a leftover pause from a prior run must not block it.
+  paused = false
+  activeRunId = runId
   res.status(202).json({ runId })
 
   const spec = getExecutionSpec(config.scenarioId)
@@ -114,14 +120,14 @@ app.post('/run', (req, res) => {
 
 app.post('/pause', (_req, res) => {
   paused = true
-  const runId: RunId = crypto.randomUUID()
+  const runId: RunId = activeRunId ?? crypto.randomUUID()
   emit({ id: crypto.randomUUID(), runId, ts: nowIso(), type: 'run.paused', level: 'info' })
   res.status(204).end()
 })
 
 app.post('/resume', (_req, res) => {
   paused = false
-  const runId: RunId = crypto.randomUUID()
+  const runId: RunId = activeRunId ?? crypto.randomUUID()
   emit({ id: crypto.randomUUID(), runId, ts: nowIso(), type: 'run.resumed', level: 'info' })
   res.status(204).end()
 })

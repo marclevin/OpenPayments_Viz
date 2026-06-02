@@ -11,9 +11,6 @@
   "scripts": {
     "build": "echo \"@opviz/shared: build not required (TS source exports)\""
   },
-  "peerDependencies": {
-    "reactflow": "^11.11.4"
-  },
   "devDependencies": {
     "typescript": "^5.6.0"
   }

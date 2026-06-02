@@ -19,7 +19,9 @@
       "Bash(ls node_modules/.vite)",
       "Bash(npm run *)",
       "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"port clear\")",
-      "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"runner stopped\")"
+      "PowerShell(Get-NetTCPConnection -LocalPort 3344 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; \"runner stopped\")",
+      "Bash(git rm *)",
+      "Bash(git stash *)"
     ]
   }
 }

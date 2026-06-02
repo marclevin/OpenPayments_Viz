@@ -31,36 +31,16 @@ function joinUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, '')}${path}`
 }
 
-export function createRunnerClient(baseUrl: string, transport: 'sse' | 'ws' = 'sse'): EventStreamClient {
+export function createRunnerClient(baseUrl: string): EventStreamClient {
   let es: EventSource | undefined
-  let ws: WebSocket | undefined
 
   function disconnect() {
     es?.close()
     es = undefined
-    if (ws && ws.readyState < 2) ws.close()
-    ws = undefined
   }
 
   function connect(callbacks: StreamCallbacks) {
     disconnect()
-
-    if (transport === 'ws') {
-      const wsUrl = joinUrl(baseUrl.replace(/^http/, 'ws'), '/events')
-      ws = new WebSocket(wsUrl)
-      ws.onopen = () => callbacks.onConnected?.()
-      ws.onclose = () => callbacks.onDisconnected?.()
-      ws.onerror = () => callbacks.onDisconnected?.()
-      ws.onmessage = (msg) => {
-        try {
-          callbacks.onConnected?.()
-          callbacks.onEvent(JSON.parse(String(msg.data)) as RunnerEvent)
-        } catch {
-          // ignore malformed
-        }
-      }
-      return
-    }
 
     const url = joinUrl(baseUrl, '/events')
     es = new EventSource(url)

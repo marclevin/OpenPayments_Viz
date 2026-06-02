@@ -3,9 +3,18 @@ export type EntityColorVar =
   | '--entitySenderWallet'
   | '--entityReceiverWallet'
   | '--entityAuthServer'
+  | '--entityAuthServerB'
   | '--entityResourceServer'
+  | '--entityResourceServerB'
   | '--entityPayment'
   | '--accent'
+
+// Scenarios with two institutions (e.g. the subscription flow) have a payer side and a payee
+// side, each with its own Auth + Resource server. Detect the payee side from the label so its
+// servers render in a distinct colour instead of colliding with the payer's.
+function isPayeeSide(label: string): boolean {
+  return /provider|receiver|merchant|payee|service/.test(label)
+}
 
 export function getEntityColorVar(label: string, kind?: string): EntityColorVar {
   const l = label.toLowerCase()
@@ -13,8 +22,10 @@ export function getEntityColorVar(label: string, kind?: string): EntityColorVar 
   if (l.includes('wallet') && (l.includes('sender') || l.includes('customer'))) return '--entitySenderWallet'
   if (l.includes('wallet') && (l.includes('receiver') || l.includes('provider'))) return '--entityReceiverWallet'
   if (l === 'client' || kind === 'client') return '--entityClient'
-  if (l.includes('auth') || kind === 'authServer') return '--entityAuthServer'
-  if (l.includes('resource') || kind === 'resourceServer') return '--entityResourceServer'
+  if (l.includes('auth') || kind === 'authServer')
+    return isPayeeSide(l) ? '--entityAuthServerB' : '--entityAuthServer'
+  if (l.includes('resource') || kind === 'resourceServer')
+    return isPayeeSide(l) ? '--entityResourceServerB' : '--entityResourceServer'
   if (l.includes('incoming') || l.includes('outgoing') || l.includes('quote')) return '--entityPayment'
   return '--accent'
 }

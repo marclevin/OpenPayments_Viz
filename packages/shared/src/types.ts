@@ -146,7 +146,9 @@ export type RunnerEvent =
       walletAddressUrl: string
       authServer: string
       resourceServer: string
-      id: string
+      // The wallet address's canonical id. Named `resourceId` (not `id`) so it never shadows
+      // RunnerEventBase.id, which must stay a unique per-event identifier.
+      resourceId: string
       assetCode: string
       assetScale: number
     })
@@ -175,11 +177,11 @@ export type RunnerEvent =
     })
   | (RunnerEventBase & {
       type: 'incomingPayment.created'
-      id: string
+      resourceId: string
     })
   | (RunnerEventBase & {
       type: 'quote.created'
-      id: string
+      resourceId: string
       debitAmount?: {
         assetCode: string
         assetScale: number
@@ -188,6 +190,6 @@ export type RunnerEvent =
     })
   | (RunnerEventBase & {
       type: 'outgoingPayment.created'
-      id: string
+      resourceId: string
     })
 

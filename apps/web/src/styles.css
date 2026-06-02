@@ -32,6 +32,9 @@
   --entityReceiverWallet: #00a3a3;
   --entityAuthServer: #7c3aed;
   --entityResourceServer: #2563eb;
+  /* Payee-side servers (two-institution scenarios) — distinct from the payer-side hues above. */
+  --entityAuthServerB: #c026d3;
+  --entityResourceServerB: #0891b2;
   --entityPayment: #16a34a;
 }
 
