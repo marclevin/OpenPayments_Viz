@@ -949,6 +949,7 @@ pre {
 
 .flowWrap {
   height: 100%;
+  position: relative;
 }
 
 /* --- Graph "pop": per-status node emphasis + animated active edges --- */
@@ -1454,5 +1455,310 @@ pre.jsonVal {
 .react-flow__attribution {
   background: transparent !important;
   color: rgba(167, 180, 207, 0.7) !important;
+}
+
+/* --- Header help button --- */
+.helpBtn {
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+/* --- Legend overlay (pinned over the Flow graph) --- */
+.legendOverlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  width: 290px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 14px 14px;
+}
+.legendHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.legendHead h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.legendClose {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 6px;
+}
+.legendClose:hover {
+  color: var(--text);
+  background: var(--accentSoft);
+}
+.legendSection + .legendSection {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.legendSectionLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.legendSectionNote {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.legendSectionNote em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text);
+}
+.legendList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.legendItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.legendGlyph {
+  flex: none;
+  width: 22px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+  line-height: 1.3;
+}
+.legendSwatchCell {
+  flex: none;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+}
+.legendEdgeSwatch {
+  display: block;
+}
+.legendStatusDot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  margin: 3px 6px 0 5px;
+}
+.legendText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.legendItemLabel {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+}
+.legendInlineGlyph {
+  font-family: var(--mono);
+}
+.legendItemMeaning {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* --- First-run orientation dialog --- */
+.introBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(11, 18, 32, 0.42);
+  backdrop-filter: blur(2px);
+}
+.introCard {
+  position: relative;
+  max-width: 540px;
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 26px 28px 22px;
+}
+.introClose {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+  padding: 6px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.introClose:hover {
+  color: var(--text);
+  background: var(--accentSoft);
+}
+.introTitle {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--text);
+  padding-right: 28px;
+}
+.introLede {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.introSection {
+  margin-top: 16px;
+}
+.introSection h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.introSteps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.introHint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.introPath {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.introPath li {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.introPathName {
+  font-weight: 700;
+  color: var(--text);
+}
+.introPathDesc {
+  color: var(--muted);
+}
+.introPathDesc::before {
+  content: ' — ';
+  color: var(--muted);
+}
+.introFooter {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.introFooterHint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* --- Transient toast notice --- */
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1300;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 380px;
+  padding: 12px 12px 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--statusActive);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: toastIn 0.22s ease-out;
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toastBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.toastTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.toastText {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.toastClose {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 6px;
+  flex: none;
+}
+.toastClose:hover {
+  color: var(--text);
+  background: var(--accentSoft);
 }
 

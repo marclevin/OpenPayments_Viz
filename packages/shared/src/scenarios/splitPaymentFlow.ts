@@ -29,7 +29,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Customer Wallet',
       position: { x: 320, y: 60 },
       description:
-        'The Customer Wallet is the public URL of the buyer who pays. Fetching it reveals the customer’s Auth Server, Resource Server, and currency. The full $100.00 is debited from this account — split across two outgoing-payments.',
+        'The Customer Wallet is the public URL of the buyer who pays. Fetching it reveals the customer’s Auth Server, Resource Server, and currency. The full $100.00 is debited from this account — split across two outgoing-payments — once the account-servicing entity settles each instruction.',
     },
     {
       id: 'customerAuth',
@@ -69,7 +69,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Outgoing · Merchant',
       position: { x: 1400, y: 70 },
       description:
-        'The outgoing-payment that moves $90.00 out of the Customer Wallet to the Merchant’s incoming-payment, priced by the Merchant quote.',
+        'An instruction to the customer’s account-servicing entity to send $90.00 from the Customer Wallet to the Merchant’s incoming-payment, priced by the Merchant quote. Creating it records the instruction; the account-servicing entity settles the actual transfer out of band.',
     },
     {
       id: 'platformOutgoing',
@@ -77,7 +77,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Outgoing · Platform',
       position: { x: 1400, y: 250 },
       description:
-        'The outgoing-payment that moves $10.00 out of the Customer Wallet to the Platform’s incoming-payment, priced by the Platform quote.',
+        'An instruction to the customer’s account-servicing entity to send $10.00 from the Customer Wallet to the Platform’s incoming-payment, priced by the Platform quote. Creating it records the instruction; the account-servicing entity settles the actual transfer out of band.',
     },
     {
       id: 'merchantWallet',
@@ -315,7 +315,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'customerResource',
       label: 'Create Outgoing Payment (merchant)',
       stepId: 'split-outgoing-merchant',
-      description: 'Holding the consented token, the Client creates the first outgoing-payment using the merchant quote — $90.00 leaves the Customer Wallet for the merchant.',
+      description: 'Holding the consented token, the Client creates the first outgoing-payment using the merchant quote — the instruction to send $90.00 directly to the merchant. The customer’s account-servicing entity settles it out of band, and only then does the $90.00 leave the Customer Wallet.',
     },
     {
       id: 'e-sp-create-op-m',
@@ -323,7 +323,7 @@ export const splitPaymentFlow: FlowDefinition = {
       source: 'customerResource',
       target: 'merchantOutgoing',
       label: 'creates',
-      description: 'The merchant outgoing-payment is materialised here — $90.00 moves directly to the merchant’s incoming-payment.',
+      description: 'The merchant outgoing-payment instruction is materialised here — addressed directly to the merchant’s incoming-payment, never routed through the platform. The account-servicing entity settles the $90.00 transfer afterwards.',
     },
     {
       id: 'e-sp-op-p',
@@ -332,7 +332,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'customerResource',
       label: 'Create Outgoing Payment (platform)',
       stepId: 'split-outgoing-platform',
-      description: 'Reusing the same consented token, the Client creates the second outgoing-payment using the platform quote — $10.00 leaves the Customer Wallet for the platform fee.',
+      description: 'Reusing the same consented token, the Client creates the second outgoing-payment using the platform quote — the instruction to send $10.00 directly to the platform fee. The customer’s account-servicing entity settles it out of band, and only then does the $10.00 leave the Customer Wallet.',
     },
     {
       id: 'e-sp-create-op-p',
@@ -340,7 +340,7 @@ export const splitPaymentFlow: FlowDefinition = {
       source: 'customerResource',
       target: 'platformOutgoing',
       label: 'creates',
-      description: 'The platform outgoing-payment is materialised here — the $10.00 fee moves directly to the platform’s incoming-payment.',
+      description: 'The platform outgoing-payment instruction is materialised here — addressed directly to the platform’s incoming-payment, never routed through the merchant. The account-servicing entity settles the $10.00 fee transfer afterwards.',
     },
   ],
   steps: [
@@ -488,11 +488,11 @@ export const splitPaymentFlow: FlowDefinition = {
       group: 'Outgoing payments',
       involvedNodeIds: ['client', 'customerResource', 'merchantOutgoing'],
       involvedEdgeIds: ['e-sp-op-m', 'e-sp-create-op-m'],
-      description: 'The Client creates the first outgoing-payment on the Customer Resource Server using the merchant quote. $90.00 leaves the Customer Wallet and arrives directly at the merchant’s incoming-payment.',
+      description: 'The Client creates the first outgoing-payment instruction on the Customer Resource Server using the merchant quote. The customer’s account-servicing entity then settles it out of band, so $90.00 leaves the Customer Wallet and arrives directly at the merchant’s incoming-payment.',
       nodeRoles: {
-        client: 'The Client uses the consented token and the merchant quote to create the merchant outgoing-payment.',
-        customerResource: 'The Customer Resource Server executes the transfer, creating the outgoing-payment.',
-        merchantOutgoing: 'The outgoing-payment is created here — $90.00 leaves the Customer Wallet for the merchant.',
+        client: 'The Client uses the consented token and the merchant quote to create the merchant outgoing-payment instruction.',
+        customerResource: 'The Customer Resource Server records the outgoing-payment instruction; its account-servicing entity performs the actual $90.00 transfer afterwards.',
+        merchantOutgoing: 'The outgoing-payment instruction is created here. The $90.00 leaves the Customer Wallet for the merchant only once the account-servicing entity settles it — not at creation time.',
       },
     },
     {
@@ -502,11 +502,11 @@ export const splitPaymentFlow: FlowDefinition = {
       group: 'Outgoing payments',
       involvedNodeIds: ['client', 'customerResource', 'platformOutgoing'],
       involvedEdgeIds: ['e-sp-op-p', 'e-sp-create-op-p'],
-      description: 'Reusing the same consented token, the Client creates the second outgoing-payment using the platform quote. $10.00 leaves the Customer Wallet and arrives directly at the platform’s fee incoming-payment — never routed through the merchant.',
+      description: 'Reusing the same consented token, the Client creates the second outgoing-payment instruction using the platform quote. The customer’s account-servicing entity settles it out of band, so $10.00 arrives directly at the platform’s fee incoming-payment — never routed through the merchant.',
       nodeRoles: {
-        client: 'The Client uses the same consented token and the platform quote to create the platform outgoing-payment.',
-        customerResource: 'The Customer Resource Server executes the second transfer, creating the outgoing-payment.',
-        platformOutgoing: 'The outgoing-payment is created here — the $10.00 fee leaves the Customer Wallet for the platform.',
+        client: 'The Client uses the same consented token and the platform quote to create the platform outgoing-payment instruction.',
+        customerResource: 'The Customer Resource Server records the second outgoing-payment instruction; its account-servicing entity performs the actual $10.00 transfer afterwards.',
+        platformOutgoing: 'The outgoing-payment instruction is created here. The $10.00 fee leaves the Customer Wallet for the platform only once the account-servicing entity settles it — not at creation time.',
       },
     },
   ],

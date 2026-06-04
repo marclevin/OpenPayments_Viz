@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, MarkerType, ReactFlowProvider, useReactFlow } from 'reactflow'
 import { EventLog } from './components/EventLog'
 import { FlowNode } from './components/FlowNode'
+import { IntroDialog } from './components/IntroDialog'
+import { LegendOverlay } from './components/LegendOverlay'
 import { ParallelEdge } from './components/ParallelEdge'
 import { getEntityColorVar, highlightEntities } from './lib/colorMap'
 import { createRunnerClient, type RunnerConfig } from './lib/eventStream'
@@ -30,6 +32,21 @@ function decorateEdgeLabel(kind: string, label?: string): string | undefined {
   if (!label) return label
   const glyph = edgeKindGlyph[kind]
   return glyph ? `${glyph} ${label}` : label
+}
+
+// "Copy as path" (Windows) and "Copy as Pathname" (macOS) often wrap the path in quotes, e.g.
+// "C:\Users\me\USD_KEY.key". Strip a single layer of matching wrapping quotes (and surrounding
+// whitespace) so the pasted path is usable as-is.
+function stripWrappingQuotes(raw: string): string {
+  const v = raw.trim()
+  if (v.length >= 2) {
+    const first = v[0]
+    const last = v[v.length - 1]
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return v.slice(1, -1)
+    }
+  }
+  return v
 }
 
 function normalizeWalletAddressInput(raw: string): string {
@@ -212,6 +229,12 @@ function AppInner() {
   const [scenarioName, setScenarioName] = useState<string>('')
   const [timelineCollapsed, setTimelineCollapsed] = useState(false)
   const [narrationCollapsed, setNarrationCollapsed] = useState(false)
+  // Legend overlay (pinned over the Flow graph) and the first-run orientation dialog.
+  const [legendOpen, setLegendOpen] = useState(false)
+  const [introOpen, setIntroOpen] = useState(false)
+  // Transient toast notice (e.g. "fill in your TestNet credentials first").
+  const [toast, setToast] = useState<{ title: string; body: string } | null>(null)
+  const toastTimerRef = useRef<number | null>(null)
 
   // Scenario Controls panel sizing (draggable splitter + maximize toggle).
   const [controlsHeight, setControlsHeight] = useState<number>(280)
@@ -393,10 +416,37 @@ function AppInner() {
       }
       const h = Number(localStorage.getItem('opviz.controlsHeight.v1'))
       if (Number.isFinite(h) && h >= 160) setControlsHeight(h)
+      // First-run orientation: show the intro dialog until the visitor has dismissed it once.
+      const introRaw = localStorage.getItem('opviz.intro.v1')
+      const introSeen = introRaw ? Boolean((JSON.parse(introRaw) as { seen?: boolean }).seen) : false
+      if (!introSeen) setIntroOpen(true)
     } catch {
       // ignore
     }
   }, [])
+
+  // Transient toast: auto-dismisses after a few seconds; a new toast replaces the old one.
+  function showToast(title: string, body: string) {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    setToast({ title, body })
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 8000)
+  }
+  function dismissToast() {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = null
+    setToast(null)
+  }
+
+  // Closing the intro records that it's been seen so it won't auto-open on future loads. The
+  // header "?" button still reopens it on demand (without clearing the flag).
+  function dismissIntro() {
+    setIntroOpen(false)
+    try {
+      localStorage.setItem('opviz.intro.v1', JSON.stringify({ seen: true }))
+    } catch {
+      // ignore
+    }
+  }
 
   function persistScenarios(next: SavedScenario[]) {
     setSavedScenarios(next)
@@ -713,6 +763,10 @@ function AppInner() {
       setBottomTab('setup')
       // Expand the relevant config section so the missing fields are visible.
       setOpenSections((s) => ({ ...s, credentials: s.credentials || credMissing, addresses: s.addresses || !credMissing }))
+      showToast(
+        'TestNet setup needed',
+        `Running on the Interledger TestNet needs your credentials and wallet addresses. Fill them in under the Configuration tab — still missing: ${missing.join(', ')}.`
+      )
       appendEvent({
         id: crypto.randomUUID(),
         runId: 'local',
@@ -727,7 +781,7 @@ function AppInner() {
     if (!clientRef.current) connectToRunner()
     const config: RunnerConfig = {
       keyId,
-      privateKeyPath,
+      privateKeyPath: stripWrappingQuotes(privateKeyPath),
       clientWalletAddressUrl: normalizeWalletAddressInput(clientWalletAddressUrl),
       sendingWalletAddressUrl: normalizeWalletAddressInput(sendingWalletAddressUrl),
       receivingWalletAddressUrl: normalizeWalletAddressInput(receivingWalletAddressUrl),
@@ -909,6 +963,14 @@ function AppInner() {
         </div>
 
         <div className="right">
+          <button
+            className="iconBtn helpBtn"
+            title="Help / orientation"
+            aria-label="Help / orientation"
+            onClick={() => setIntroOpen(true)}
+          >
+            ?
+          </button>
           <div className="badge">
             <span className={`dot ${connected === 'connected' || transport === 'mock' ? 'ok' : 'bad'}`} />
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
@@ -972,9 +1034,19 @@ function AppInner() {
         >
           <div className="panel">
             <div className="panelHeader">
-              <h2>Flow</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <h2>Flow</h2>
+                <button
+                  className={`tab ${legendOpen ? 'active' : ''}`}
+                  onClick={() => setLegendOpen((v) => !v)}
+                  aria-pressed={legendOpen}
+                >
+                  {legendOpen ? 'Hide legend' : 'Legend'}
+                </button>
+              </div>
             </div>
             <div className="flowWrap">
+              {legendOpen ? <LegendOverlay onClose={() => setLegendOpen(false)} /> : null}
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -1060,7 +1132,7 @@ function AppInner() {
               ) : (
                 <div className="configForm">
                   <CollapsibleCard
-                    title="Configuration & Endpoints"
+                    title="Configuration"
                     hint="Save/load your setup for later"
                     open={openSections.scenario}
                     onToggle={() => setOpenSections((s) => ({ ...s, scenario: !s.scenario }))}
@@ -1117,22 +1189,7 @@ function AppInner() {
                       </button>
                     </div>
                     <div className="subtleHelp">
-                      Saves addresses + Key ID + endpoints. Does <strong>not</strong> save private key contents.
-                    </div>
-
-                    <div className="grid2" style={{ marginTop: 4 }}>
-                      <div className="field">
-                        <label>Runner base URL</label>
-                        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://localhost:3344" />
-                      </div>
-                      <div className="field">
-                        <label>UI base URL (consent redirect)</label>
-                        <input value={uiBaseUrl} onChange={(e) => setUiBaseUrl(e.target.value)} placeholder="http://localhost:5173/" />
-                      </div>
-                      <div className="field">
-                        <label>Callback port</label>
-                        <input type="number" value={callbackPort} onChange={(e) => setCallbackPort(Number(e.target.value))} />
-                      </div>
+                      Saves your addresses + Key ID. Does <strong>not</strong> save private key contents.
                     </div>
                   </CollapsibleCard>
 
@@ -1142,6 +1199,17 @@ function AppInner() {
                     open={openSections.credentials}
                     onToggle={() => setOpenSections((s) => ({ ...s, credentials: !s.credentials }))}
                   >
+                    <div className="hint">
+                      No credentials yet? Create a free account and key pair at the{' '}
+                      <a
+                        href="https://wallet.interledger-test.dev/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Interledger Test Wallet
+                      </a>
+                      . TestNet wallets carry no real money.
+                    </div>
                     <div className="grid2">
                       <div className="field">
                         <label>Key ID</label>
@@ -1149,13 +1217,16 @@ function AppInner() {
                       </div>
                       <div className="field" style={{ gridColumn: '1 / -1' }}>
                         <label>Private key path</label>
-                        <input value={privateKeyPath} onChange={(e) => setPrivateKeyPath(e.target.value)} placeholder="C:\\Users\\...\\USD_KEY.key" />
+                        <input value={privateKeyPath} onChange={(e) => setPrivateKeyPath(stripWrappingQuotes(e.target.value))} placeholder="C:\\Users\\...\\USD_KEY.key" />
                       </div>
                     </div>
                     <div className="hint">
-                      The runner reads the private key from this path on disk — the key file is
-                      never uploaded to the browser. Use an <strong>absolute path</strong> to the
-                      <span className="mono"> .key</span> file on the machine running the runner.
+                      We need the full path to your private key (the <span className="mono">.key</span>{' '}
+                      file) on this computer — the <strong>absolute path</strong>.
+                      <br />
+                       <strong>Windows</strong> — Shift + right-click the file →
+                      “Copy as path”. <strong><br/>macOS</strong> — right-click, then hold Option →
+                      “Copy … as Pathname”.
                     </div>
                   </CollapsibleCard>
 
@@ -1244,6 +1315,20 @@ function AppInner() {
         </div>
         )}
       </div>
+
+      {introOpen ? <IntroDialog onClose={dismissIntro} /> : null}
+
+      {toast ? (
+        <div className="toast" role="status" aria-live="polite">
+          <div className="toastBody">
+            <div className="toastTitle">{toast.title}</div>
+            <div className="toastText">{toast.body}</div>
+          </div>
+          <button type="button" className="toastClose" aria-label="Dismiss" onClick={dismissToast}>
+            ✕
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
