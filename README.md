@@ -73,6 +73,10 @@ with `Ctrl+C`.
 The timeline, graph, and narration follow the run automatically. Click any step, node, or
 arrow at any time to pin the explanation panel to it.
 
+On first load a short **welcome guide** explains the basics and suggests a scenario order; reopen
+it anytime with the **?** button in the header. The **Legend** button (top-right of the Flow
+panel) decodes the graph's symbols, colours, and arrow styles.
+
 ### TestNet mode (real run)
 
 1. Complete the [TestNet setup](#testnet-setup) below.
@@ -128,8 +132,8 @@ Runner (`apps/runner`):
 
 - **"Consent timed out"** — you didn't complete the consent redirect within `CONSENT_TIMEOUT_MS`.
   Press Start again, then Consent, and approve promptly (raise `CONSENT_TIMEOUT_MS` if needed).
-- **"Callback port … is already in use"** — a previous callback server is still bound. Stop any
-  leftover runner process, or set a different **Callback port** in the Configuration tab.
+- **"Callback port … is already in use"** — a previous callback server (default port `3999`) is
+  still bound. Stop any leftover runner process and start the run again to free it.
 - **Grant continuation error** — the consent wasn't completed, expired, or was already used.
   Start the run again.
 - **The failing step turns red** in the timeline and graph; open the **Event Logs** tab for the
