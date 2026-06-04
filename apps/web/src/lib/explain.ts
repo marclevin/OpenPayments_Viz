@@ -71,7 +71,12 @@ function edgeStatusSentence(status: StepStatus | undefined): string {
 export function explainEdge(edge: FlowEdge, edgeStatus: StepStatus | undefined): ExplainSegment[] {
   const out: ExplainSegment[] = []
   if (edge.description) out.push({ label: 'What it is', body: edge.description })
-  if (edge.kind === 'relation' || !edge.stepId) {
+  if (edge.kind === 'creation') {
+    out.push({
+      label: 'Creation',
+      body: 'This resource is created and hosted on the Resource Server — the arrow points from the server to the resource it produces.',
+    })
+  } else if (edge.kind === 'relation' || !edge.stepId) {
     out.push({
       label: 'Relationship',
       body: 'This is a structural relationship, not a network request, so it has no live status.',

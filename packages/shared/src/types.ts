@@ -15,7 +15,7 @@ export type FlowNodeKind =
   | 'outgoingPayment'
   | 'generic'
 
-export type FlowEdgeKind = 'request' | 'response' | 'redirect' | 'relation'
+export type FlowEdgeKind = 'request' | 'response' | 'redirect' | 'relation' | 'creation'
 
 export type StepKind =
   | 'wallet.resolve'

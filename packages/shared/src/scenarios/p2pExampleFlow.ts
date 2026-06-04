@@ -1,15 +1,15 @@
 import type { FlowDefinition } from '../types.js'
 
-export const openPaymentsExampleFlow: FlowDefinition = {
-  id: 'open-payments-example',
+export const p2pExampleFlow: FlowDefinition = {
+  id: 'p2p-example',
   title: 'One Time P2P Payment',
-  description: 'Discovery → grants → quote → interactive outgoing payment',
+  description: 'A simple one-time peer-to-peer payment flow. Sender Wallet pays Receiver Wallet 10.00 USD fixed (Receiver always gets exactly 10.00 USD).',
   nodes: [
     {
       id: 'client',
       kind: 'client',
       label: 'Client',
-      position: { x: 0, y: 120 },
+      position: { x: 0, y: 230 },
       description:
         'The Client is the program driving the payment (here, the runner). It holds a private key and signs every request so servers can verify who is calling. It talks to wallet addresses, the Auth Server, and the Resource Server to move money on the sender’s behalf.',
     },
@@ -17,7 +17,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'senderWallet',
       kind: 'walletAddress',
       label: 'Sender Wallet',
-      position: { x: 260, y: 0 },
+      position: { x: 260, y: 50 },
       description:
         'The Sender Wallet is a public URL identifying the account that pays. Fetching it reveals which Auth Server issues permission and which Resource Server holds the account, plus the currency it uses.',
     },
@@ -25,7 +25,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'receiverWallet',
       kind: 'walletAddress',
       label: 'Receiver Wallet',
-      position: { x: 260, y: 240 },
+      position: { x: 260, y: 430 },
       description:
         'The Receiver Wallet is the public URL identifying the account that gets paid. The Client reads it to learn where to create the incoming-payment and which servers the recipient trusts.',
     },
@@ -33,7 +33,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'auth',
       kind: 'authServer',
       label: 'Auth Server',
-      position: { x: 540, y: 60 },
+      position: { x: 580, y: 180 },
       description:
         'The Auth Server implements GNAP (Grant Negotiation and Authorization Protocol). It decides whether the Client may act and hands back an access token. Some actions are granted automatically; spending money requires the wallet owner to approve interactively.',
     },
@@ -41,7 +41,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'resource',
       kind: 'resourceServer',
       label: 'Resource Server',
-      position: { x: 540, y: 200 },
+      position: { x: 560, y: 300 },
       description:
         'The Resource Server is the wallet’s API. Once the Client presents a valid access token, the Resource Server is where the incoming-payment, quote, and outgoing-payment resources are actually created.',
     },
@@ -49,7 +49,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'incomingPayment',
       kind: 'incomingPayment',
       label: 'Incoming Payment',
-      position: { x: 820, y: 250 },
+      position: { x: 860, y: 430 },
       description:
         'An incoming-payment is a resource on the receiver’s Resource Server that says "this account is expecting money." It defines how much to receive and becomes the destination the payment is sent to.',
     },
@@ -57,7 +57,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'quote',
       kind: 'quote',
       label: 'Quote',
-      position: { x: 820, y: 180 },
+      position: { x: 860, y: 110 },
       description:
         'A quote is a firm price for the transfer, created on the sender’s Resource Server. It locks in how much will be debited from the sender to deliver the requested amount to the receiver, including any fees or currency conversion.',
     },
@@ -65,7 +65,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       id: 'outgoingPayment',
       kind: 'outgoingPayment',
       label: 'Outgoing Payment',
-      position: { x: 820, y: 40 },
+      position: { x: 860, y: 0 },
       description:
         'An outgoing-payment is the resource that actually moves money out of the Sender Wallet. It references the quote for the price and the incoming-payment as the destination, and it can only be created after the sender has consented.',
     },
@@ -172,31 +172,31 @@ export const openPaymentsExampleFlow: FlowDefinition = {
         'Holding the consented token, the Client POSTs to the sender’s Resource Server to create the outgoing-payment, which moves the money using the quote and the incoming-payment as destination.',
     },
     {
-      id: 'e-rel-ip',
-      kind: 'relation',
-      source: 'receiverWallet',
+      id: 'e-create-ip',
+      kind: 'creation',
+      source: 'resource',
       target: 'incomingPayment',
-      label: 'incomingPayment',
+      label: 'creates',
       description:
-        'A structural link, not a network call: the incoming-payment belongs to the Receiver Wallet and lives on its Resource Server.',
+        'The incoming-payment resource is created and hosted on the receiver’s Resource Server. The Client’s "Create Incoming Payment" request lands here, and the server materialises the resource shown.',
     },
     {
-      id: 'e-rel-q',
-      kind: 'relation',
-      source: 'senderWallet',
+      id: 'e-create-q',
+      kind: 'creation',
+      source: 'resource',
       target: 'quote',
-      label: 'quote',
+      label: 'creates',
       description:
-        'A structural link, not a network call: the quote belongs to the Sender Wallet and is created on its Resource Server.',
+        'The quote resource is created and hosted on the sender’s Resource Server. The Client’s "Create Quote" request lands here, and the server materialises the firm price shown.',
     },
     {
-      id: 'e-rel-op',
-      kind: 'relation',
-      source: 'senderWallet',
+      id: 'e-create-op',
+      kind: 'creation',
+      source: 'resource',
       target: 'outgoingPayment',
-      label: 'outgoingPayment',
+      label: 'creates',
       description:
-        'A structural link, not a network call: the outgoing-payment belongs to the Sender Wallet and debits it.',
+        'The outgoing-payment resource is created and hosted on the sender’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server materialises the payment that moves the money.',
     },
   ],
   steps: [
@@ -240,7 +240,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       title: 'Create incoming payment',
       group: 'Incoming payment',
       involvedNodeIds: ['client', 'resource', 'incomingPayment'],
-      involvedEdgeIds: ['e-ip', 'e-rel-ip'],
+      involvedEdgeIds: ['e-ip', 'e-create-ip'],
       description:
         'The Client creates the incoming-payment resource on the receiver’s Resource Server and gets back its public details — this is where the money will land.',
       nodeRoles: {
@@ -274,7 +274,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       title: 'Create quote',
       group: 'Quote',
       involvedNodeIds: ['client', 'resource', 'quote'],
-      involvedEdgeIds: ['e-quote', 'e-rel-q'],
+      involvedEdgeIds: ['e-quote', 'e-create-q'],
       description:
         'The Client creates the quote on the sender’s Resource Server, fixing the debit amount needed to deliver the payment to the incoming-payment.',
       nodeRoles: {
@@ -324,7 +324,7 @@ export const openPaymentsExampleFlow: FlowDefinition = {
       title: 'Create outgoing payment',
       group: 'Outgoing payment',
       involvedNodeIds: ['client', 'resource', 'outgoingPayment'],
-      involvedEdgeIds: ['e-op', 'e-rel-op'],
+      involvedEdgeIds: ['e-op', 'e-create-op'],
       description:
         'The Client creates the outgoing-payment on the sender’s Resource Server, which actually moves the money using the quote and the incoming-payment as the destination.',
       nodeRoles: {

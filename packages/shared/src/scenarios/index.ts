@@ -1,16 +1,16 @@
 import type { FlowDefinition, FlowExecutionSpec } from '../types.js'
-import { openPaymentsExampleFlow } from './openPaymentsExampleFlow.js'
+import { p2pExampleFlow } from './p2pExampleFlow.js'
 import { subscriptionFixedFlow, subscriptionFixedSpec } from './subscriptionFixedFlow.js'
 
-export * from './openPaymentsExampleFlow.js'
+export * from './p2pExampleFlow.js'
 export * from './subscriptionFixedFlow.js'
 
 // Registry of all selectable scenarios. Adding a new teaching scenario is purely
 // data: author a FlowDefinition (with node/edge/step descriptions and per-step
 // nodeRoles) and append it here — no app logic changes required.
-export const scenarios: FlowDefinition[] = [openPaymentsExampleFlow, subscriptionFixedFlow]
+export const scenarios: FlowDefinition[] = [p2pExampleFlow, subscriptionFixedFlow]
 
-export const defaultScenarioId = openPaymentsExampleFlow.id
+export const defaultScenarioId = p2pExampleFlow.id
 
 export function getScenarioById(id: string): FlowDefinition | undefined {
   return scenarios.find((s) => s.id === id)
@@ -18,7 +18,7 @@ export function getScenarioById(id: string): FlowDefinition | undefined {
 
 // Execution spec for the original P2P one-time payment (canonical sequence, fixed $10 incoming).
 const openPaymentsExampleSpec: FlowExecutionSpec = {
-  scenarioId: openPaymentsExampleFlow.id,
+  scenarioId: p2pExampleFlow.id,
   steps: {
     walletResolve: 'step-wallet-resolve',
     incomingGrant: 'step-grant-incoming',

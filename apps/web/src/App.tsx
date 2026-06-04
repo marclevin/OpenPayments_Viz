@@ -1,19 +1,36 @@
 import { defaultScenarioId, getExecutionSpec, getScenarioById, scenarios } from '@opviz/shared/scenarios'
-import type { FlowEdge, FlowNode as FlowNodeT, FlowStep, RunnerEvent, StepStatus } from '@opviz/shared'
+import type { FlowDefinition, FlowEdge, FlowNode as FlowNodeT, FlowStep, RunnerEvent, StepStatus } from '@opviz/shared'
 import { getStepStatusFromEvents } from '@opviz/shared'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, MarkerType, ReactFlowProvider, useReactFlow } from 'reactflow'
+import { EventLog } from './components/EventLog'
 import { FlowNode } from './components/FlowNode'
+import { ParallelEdge } from './components/ParallelEdge'
 import { getEntityColorVar, highlightEntities } from './lib/colorMap'
 import { createRunnerClient, type RunnerConfig } from './lib/eventStream'
 import { type ExplainSegment, explainEdge, explainNode, explainStep, nodeStatus } from './lib/explain'
 import { makeMockConsentCompletionEvents, makeMockRunEvents } from './lib/mockRun'
 
 type TransportMode = 'mock' | 'sse'
-type BottomTab = 'inspector' | 'setup'
+type BottomTab = 'inspector' | 'description' | 'setup'
 type Selection = { kind: 'node' | 'edge' | 'step'; id: string } | null
 
 const nodeTypes = { flowNode: FlowNode }
+const edgeTypes = { parallel: ParallelEdge }
+
+// Prefix edge labels with a monochrome glyph so each kind reads as a legend entry:
+// ⚡ network/API call, ⊕ resource creation, ↪ human/browser consent hop. Structural
+// relations and responses get no glyph so they stay quiet.
+const edgeKindGlyph: Record<string, string> = {
+  request: '⚡',
+  creation: '⊕',
+  redirect: '↪',
+}
+function decorateEdgeLabel(kind: string, label?: string): string | undefined {
+  if (!label) return label
+  const glyph = edgeKindGlyph[kind]
+  return glyph ? `${glyph} ${label}` : label
+}
 
 function normalizeWalletAddressInput(raw: string): string {
   const v = raw.trim()
@@ -26,36 +43,10 @@ function normalizeWalletAddressInput(raw: string): string {
 }
 
 function pillClass(status: StepStatus) {
-  if (status === 'success') return 'pill ok'
-  if (status === 'error') return 'pill err'
-  if (status === 'active') return 'pill act'
-  return 'pill'
-}
-
-function prettyJson(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
-function formatTime(ts: string | undefined): string {
-  if (!ts) return ''
-  try {
-    const d = new Date(ts)
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch {
-    return ts
-  }
-}
-
-function eventVarName(e: RunnerEvent): string {
-  if (e.type.startsWith('walletAddress.')) return '--entitySenderWallet'
-  if (e.type.startsWith('grant.')) return '--entityAuthServer'
-  if (e.type.includes('Payment') || e.type.includes('quote')) return '--entityPayment'
-  if (e.type.startsWith('runner.')) return '--accent'
-  return '--accent'
+  if (status === 'success') return 'pill statusPill ok'
+  if (status === 'error') return 'pill statusPill err'
+  if (status === 'active') return 'pill statusPill act'
+  return 'pill statusPill'
 }
 
 function NarrationParagraph({ text }: { text: string }) {
@@ -72,6 +63,48 @@ function NarrationParagraph({ text }: { text: string }) {
         )
       )}
     </p>
+  )
+}
+
+// A plain-language overview of the selected scenario: the title, its one-line summary, and a
+// grouped walkthrough built from each step's own prose. All text runs through NarrationParagraph
+// so entity names (Client, Auth Server, Quote…) keep their colour coding.
+function ScenarioDescription({ flow }: { flow: FlowDefinition }) {
+  // Collapse consecutive steps that share a `group` label into one section.
+  const groups = useMemo(() => {
+    const out: Array<{ label?: string; steps: FlowStep[] }> = []
+    for (const step of flow.steps) {
+      const last = out[out.length - 1]
+      if (last && last.label === step.group) last.steps.push(step)
+      else out.push({ label: step.group, steps: [step] })
+    }
+    return out
+  }, [flow])
+
+  return (
+    <div className="scenarioDesc">
+      <h3 className="scenarioDescTitle">{flow.title}</h3>
+      {flow.description && (
+        <div className="scenarioDescLede">
+          <NarrationParagraph text={flow.description} />
+        </div>
+      )}
+      <div className="scenarioWalkthrough">
+        {groups.map((g, gi) => (
+          <section key={gi} className="scenarioGroup">
+            {g.label && <div className="scenarioGroupLabel">{g.label}</div>}
+            <ol className="scenarioSteps">
+              {g.steps.map((s) => (
+                <li key={s.id} className="scenarioStep">
+                  <div className="scenarioStepTitle">{s.title}</div>
+                  {s.description && <NarrationParagraph text={s.description} />}
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -271,7 +304,12 @@ function AppInner() {
       const sourceNode = flow.nodes.find((n) => n.id === focus.edge.source)
       return {
         title: focus.edge.label ?? 'Relationship',
-        badge: focus.edge.kind === 'relation' ? 'Relationship' : 'Request',
+        badge:
+          focus.edge.kind === 'relation'
+            ? 'Relationship'
+            : focus.edge.kind === 'creation'
+              ? 'Creates'
+              : 'Request',
         colorVar: (sourceNode ? getEntityColorVar(sourceNode.label, sourceNode.kind) : '--accent') as string,
       }
     }
@@ -497,6 +535,18 @@ function AppInner() {
       }
     })
 
+    // Edges that share the same source→target stack on top of each other and their labels
+    // collide. Count each group up front so we can fan them apart with a per-edge offset below.
+    // Redirect is excluded — it runs the other direction on its own handles.
+    const parallelTotals: Record<string, number> = {}
+    for (const edge of flow.edges) {
+      if (edge.kind === 'redirect') continue
+      const key = `${edge.source}->${edge.target}`
+      parallelTotals[key] = (parallelTotals[key] ?? 0) + 1
+    }
+    const parallelSeen: Record<string, number> = {}
+    const PARALLEL_SPACING = 30
+
     const e = flow.edges.map((edge) => {
       const st = edge.stepId ? statusesByStepId[edge.stepId] : undefined
       const selected = focusEdgeIds.has(edge.id)
@@ -504,7 +554,14 @@ function AppInner() {
       const isRedirect = edge.kind === 'redirect'
       const isRelation = edge.kind === 'relation'
       const isResponse = edge.kind === 'response'
+      const isCreation = edge.kind === 'creation'
       const isActive = Boolean(edge.stepId && statusesByStepId[edge.stepId] === 'active')
+      // Fan parallel edges (same source→target) apart so their labels don't overlap.
+      const pairKey = `${edge.source}->${edge.target}`
+      const groupTotal = isRedirect ? 1 : parallelTotals[pairKey] ?? 1
+      const groupIndex = isRedirect ? 0 : (parallelSeen[pairKey] = (parallelSeen[pairKey] ?? -1) + 1)
+      const isParallel = groupTotal > 1
+      const parallelOffset = isParallel ? (groupIndex - (groupTotal - 1) / 2) * PARALLEL_SPACING : 0
       const strokeColor =
         st === 'error'
           ? 'var(--statusError)'
@@ -514,27 +571,51 @@ function AppInner() {
               ? 'var(--statusActive)'
               : isRelation
                 ? 'rgba(15, 23, 42, 0.18)'
-                : isRedirect
-                  ? 'rgba(0, 59, 92, 0.68)'
-                  : isRequest
-                    ? 'rgba(0, 59, 92, 0.58)'
-                    : 'rgba(15, 23, 42, 0.26)'
+                : isCreation
+                  ? 'rgba(16, 122, 87, 0.7)'
+                  : isRedirect
+                    ? 'var(--edgeRedirect)'
+                    : isRequest
+                      ? 'rgba(0, 59, 92, 0.58)'
+                      : 'rgba(15, 23, 42, 0.26)'
       return {
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        type: 'smoothstep',
-        label: edge.label,
+        // Redirect runs backward (right-to-left). Binding it to the left-source / right-target
+        // anchors makes it leave the Auth node on the left and enter the Client on the right,
+        // so the bezier curves tightly through the open band instead of looping around to the
+        // right and covering other nodes. All other edges use the default left/right handles.
+        sourceHandle: isRedirect ? 'redirect-source' : undefined,
+        targetHandle: isRedirect ? 'redirect-target' : undefined,
+        // Redirect is the human-in-the-loop hop: a curved bezier to stand out from the rigid
+        // orthogonal API/relation edges. Parallel edges (multiple calls to the same server) use
+        // the custom fanned edge so they don't stack. Everything else stays smoothstep.
+        type: isRedirect ? 'default' : isParallel ? 'parallel' : 'smoothstep',
+        data: isParallel ? { offset: parallelOffset } : undefined,
+        label: decorateEdgeLabel(edge.kind, edge.label),
         className: isActive ? 'edge-flow-active' : undefined,
-        markerEnd: isRelation ? undefined : { type: MarkerType.ArrowClosed, width: 20, height: 20, color: strokeColor },
+        markerEnd: isRelation
+          ? undefined
+          : {
+              // Creation uses an open arrowhead (resource coming into existence); all other
+              // directed edges use a solid closed arrow.
+              type: isCreation ? MarkerType.Arrow : MarkerType.ArrowClosed,
+              width: 20,
+              height: 20,
+              color: strokeColor,
+            },
         animated: isRedirect || isActive,
         style: {
-          strokeWidth: selected ? 3 : isRelation ? 1 : isResponse ? 1.3 : 1.6,
+          strokeWidth: selected ? 3 : isRelation ? 1 : isCreation ? 1.5 : isResponse ? 1.3 : 1.8,
           stroke: strokeColor,
-          strokeDasharray: isRedirect ? '5 5' : isResponse ? '2 6' : undefined,
+          strokeDasharray: isRedirect ? '5 5' : isCreation ? '4 4' : isRelation ? '1 5' : isResponse ? '2 6' : undefined,
           opacity: focus && !selected ? 0.55 : 1,
         },
-        labelStyle: { fill: 'rgba(11, 18, 32, 0.72)', fontSize: 12 },
+        // Structural relations recede (small, muted); creation labels are emphasised.
+        labelStyle: isRelation
+          ? { fill: 'rgba(11, 18, 32, 0.5)', fontSize: 10 }
+          : { fill: 'rgba(11, 18, 32, 0.72)', fontSize: 12, fontWeight: isCreation ? 700 : 400 },
       }
     })
 
@@ -746,7 +827,11 @@ function AppInner() {
             <button className={`btn primary${isRunning ? ' running' : ''}`} onClick={startRun} disabled={isRunning}>
               <span className="btnIcon" aria-hidden="true">▶</span> Start
             </button>
-            <button className="btn secondary" onClick={openConsent} disabled={!isRunning || !consentEnabled}>
+            <button
+              className={`btn secondary${consentState.needsConsent && consentEnabled ? ' consentNeeded' : ''}`}
+              onClick={openConsent}
+              disabled={!isRunning || !consentEnabled}
+            >
               <span className="btnIcon" aria-hidden="true">↗</span> Consent
             </button>
             <button
@@ -762,7 +847,7 @@ function AppInner() {
             <div className="speed">
               <span className="speedLabel">Speed</span>
               <div className="speedPresets">
-                {[0.5, 1, 2, 3].map((s) => (
+                {[0.1, 0.5, 1, 2, 3].map((s) => (
                   <button
                     key={s}
                     className={`speedPreset ${speed === s ? 'active' : ''}`}
@@ -822,7 +907,7 @@ function AppInner() {
                     >
                       <div className="title">
                         <div>{step.title}</div>
-                        <div className={pillClass(st)}>{st}</div>
+                        <div key={st} className={pillClass(st)}>{st}</div>
                       </div>
                     </div>
                   </React.Fragment>
@@ -847,6 +932,7 @@ function AppInner() {
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 fitView
                 proOptions={{ hideAttribution: true }}
                 onNodeClick={(_, n) => {
@@ -882,45 +968,48 @@ function AppInner() {
                   <button className={`tab ${bottomTab === 'inspector' ? 'active' : ''}`} onClick={() => setBottomTab('inspector')}>
                     Event Logs
                   </button>
+                  <button className={`tab ${bottomTab === 'description' ? 'active' : ''}`} onClick={() => setBottomTab('description')}>
+                    Scenario Description
+                  </button>
                   <button className={`tab ${bottomTab === 'setup' ? 'active' : ''}`} onClick={() => setBottomTab('setup')}>
                     Configuration
                   </button>
-                  <button className="tab" title={controlsMaximized ? 'Restore' : 'Maximize'} onClick={toggleMaximizeControls}>
-                    {controlsMaximized ? 'Restore' : 'Maximize'}
+                  <button
+                    className="iconBtn maximizeBtn"
+                    title={controlsMaximized ? 'Restore' : 'Maximize'}
+                    aria-label={controlsMaximized ? 'Restore panel' : 'Maximize panel'}
+                    aria-pressed={controlsMaximized}
+                    onClick={toggleMaximizeControls}
+                  >
+                    {controlsMaximized ? (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <polyline points="4 14 10 14 10 20" />
+                        <polyline points="20 10 14 10 14 4" />
+                        <line x1="14" y1="10" x2="21" y2="3" />
+                        <line x1="3" y1="21" x2="10" y2="14" />
+                      </svg>
+                    ) : (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <polyline points="15 3 21 3 21 9" />
+                        <polyline points="9 21 3 21 3 15" />
+                        <line x1="21" y1="3" x2="14" y2="10" />
+                        <line x1="3" y1="21" x2="10" y2="14" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
             <div className="panelBody">
               {bottomTab === 'inspector' ? (
-                <div className="inspectorList">
-                  {events.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-                      Run a scenario to generate events.
-                    </div>
-                  ) : (
-                    [...events].slice(-60).reverse().map((e) => {
-                      const varName = eventVarName(e)
-                      const title = e.stepId ? `${e.type} · ${e.stepId}` : e.type
-                      return (
-                        <details key={e.id} className="eventRow">
-                          <summary style={{ borderLeft: `6px solid var(${varName})` }}>
-                            <div className="eventMeta">
-                              <span className="eventTag" style={{ borderColor: `var(${varName})`, color: `var(${varName})` }}>
-                                {e.type}
-                              </span>
-                              <div className="eventTitle">{title}</div>
-                            </div>
-                            <div className="eventTime">{formatTime(e.ts)}</div>
-                          </summary>
-                          <div className="eventBody">
-                            <pre>{prettyJson(e)}</pre>
-                          </div>
-                        </details>
-                      )
-                    })
-                  )}
-                </div>
+                <EventLog
+                  events={events}
+                  flow={flow}
+                  onSelectStep={selectStep}
+                  selectedStepId={selectedStepId}
+                />
+              ) : bottomTab === 'description' ? (
+                <ScenarioDescription flow={flow} />
               ) : (
                 <div className="configForm">
                   <CollapsibleCard
@@ -1009,10 +1098,10 @@ function AppInner() {
                     <div className="grid2">
                       <div className="field">
                         <label>Key ID</label>
-                        <input value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="(from your *_KEY_ID.txt)" />
+                        <input value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="Key ID from Test Wallet" />
                       </div>
                       <div className="field" style={{ gridColumn: '1 / -1' }}>
-                        <label>Private key path (on the runner machine)</label>
+                        <label>Private key path</label>
                         <input value={privateKeyPath} onChange={(e) => setPrivateKeyPath(e.target.value)} placeholder="C:\\Users\\...\\USD_KEY.key" />
                       </div>
                     </div>

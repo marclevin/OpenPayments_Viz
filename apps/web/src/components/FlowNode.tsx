@@ -1,6 +1,6 @@
 import type { StepStatus } from '@opviz/shared'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import { getEntityColorVar } from '../lib/colorMap'
+import { getEntityColorVar, getSideAccentVar } from '../lib/colorMap'
 
 type FlowNodeData = {
   label: string
@@ -8,6 +8,11 @@ type FlowNodeData = {
   status?: StepStatus
   selected?: boolean
 }
+
+// Active agents are the engines that drive the flow (they act); everything else is a passive
+// resource being read or created (it is acted upon). They get distinct shapes so a student can
+// tell at a glance what runs the process vs. what is data.
+const agentKinds = new Set(['client', 'authServer', 'resourceServer', 'idp'])
 
 const kindGlyph: Record<string, string> = {
   client: '◻',
@@ -37,23 +42,47 @@ const handleStyle = {
   background: 'rgba(15,23,42,0.35)',
 }
 
+// Invisible anchor handles used only by the redirect edge so it can leave a node on its left
+// and enter on its right — giving a tight return curve instead of the big right-side loop the
+// default left/right handles would force. opacity:0 keeps them off-screen; edges bind by id.
+const hiddenHandleStyle = { ...handleStyle, opacity: 0, pointerEvents: 'none' as const }
+
 export function FlowNode({ data }: NodeProps<FlowNodeData>) {
   const entityVar = getEntityColorVar(data.label, data.kind)
   const entityColor = `var(${entityVar})`
-  return (
-    <div
-      className={`flowNodeCard status-${data.status ?? 'idle'}${data.selected ? ' is-selected' : ''}`}
-      style={{
-        borderRadius: 16,
-        // All-longhand border props (no `border` shorthand) so the accent left edge doesn't
-        // collide with the shorthand on rerender.
-        borderStyle: 'solid',
-        borderColor: data.selected ? 'rgba(0,59,92,0.45)' : 'rgba(15,23,42,0.16)',
+  const isAgent = agentKinds.has(data.kind)
+  // Resources carry a side-accent stripe (warm = sender side, teal = receiver side); fall back
+  // to the entity colour when the resource isn't side-specific.
+  const accentVar = getSideAccentVar(data.label)
+  const accentColor = accentVar ? `var(${accentVar})` : entityColor
+  // Agents read as sharp, heavy-bordered "engine" boxes; resources as soft pills with a side stripe.
+  const shapeStyle = isAgent
+    ? {
+        borderRadius: 8,
+        borderStyle: 'solid' as const,
+        borderColor: entityColor,
+        borderTopWidth: 2,
+        borderRightWidth: 2,
+        borderBottomWidth: 2,
+        borderLeftWidth: 2,
+      }
+    : {
+        borderRadius: 22,
+        borderStyle: 'solid' as const,
+        borderColor: 'rgba(15,23,42,0.16)',
         borderTopWidth: 1,
         borderRightWidth: 1,
         borderBottomWidth: 1,
         borderLeftWidth: 5,
-        borderLeftColor: entityColor,
+        borderLeftColor: accentColor,
+      }
+  return (
+    <div
+      className={`flowNodeCard status-${data.status ?? 'idle'}${data.selected ? ' is-selected' : ''}`}
+      style={{
+        // Shape (radius + border) is driven by whether this is an active agent or a passive
+        // resource — see shapeStyle above.
+        ...shapeStyle,
         background: 'rgba(255,255,255,0.94)',
         overflow: 'hidden',
         minWidth: 168,
@@ -105,6 +134,15 @@ export function FlowNode({ data }: NodeProps<FlowNodeData>) {
         />
       </div>
       <Handle type="source" position={Position.Right} style={handleStyle} />
+      {/*
+        Redirect-only anchors: a source on the left and a target on the right, so the redirect
+        edge can leave a node on its left and enter on its right (tight return curve). These are
+        declared LAST on purpose — React Flow binds an edge with no explicit handle to the FIRST
+        source/target in DOM order, so the default left-target / right-source above must come
+        first or every edge would snap to these.
+      */}
+      <Handle id="redirect-source" type="source" position={Position.Left} style={hiddenHandleStyle} />
+      <Handle id="redirect-target" type="target" position={Position.Right} style={hiddenHandleStyle} />
     </div>
   )
 }

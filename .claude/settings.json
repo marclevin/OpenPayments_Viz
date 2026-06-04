@@ -29,7 +29,8 @@
       "Bash(curl -s http://localhost:3344/health)",
       "Bash(curl -s -o /dev/null -w \"http %{http_code}\\\\n\" http://localhost:5173/)",
       "Read(//tmp/**)",
-      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3344,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; '\\\\''stopped'\\\\''')"
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3344,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; '\\\\''stopped'\\\\''')",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }
