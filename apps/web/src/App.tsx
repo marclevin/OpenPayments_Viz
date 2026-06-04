@@ -184,6 +184,9 @@ function AppInner() {
   // The selected scenario drives both the visual graph and the runner config.
   const [scenarioId, setScenarioId] = useState<string>(defaultScenarioId)
   const flow = useMemo(() => getScenarioById(scenarioId) ?? scenarios[0]!, [scenarioId])
+  // Some scenarios are illustrative and can't run against the live TestNet (e.g. split payments,
+  // which the single-sequence runner can't orchestrate). For those we lock the transport to mock.
+  const mockOnly = Boolean(flow.mockOnly)
   const [keyId, setKeyId] = useState('')
   const [privateKeyPath, setPrivateKeyPath] = useState('')
   const [clientWalletAddressUrl, setClientWalletAddressUrl] = useState('')
@@ -374,6 +377,12 @@ function AppInner() {
   useEffect(() => {
     speedRef.current = speed
   }, [speed])
+
+  // Mock-only scenarios can't use the live TestNet transport: force back to mock if one is
+  // selected while on SSE. The Method dropdown also disables the TestNet option below.
+  useEffect(() => {
+    if (mockOnly && transport !== 'mock') setTransport('mock')
+  }, [mockOnly, transport])
 
   useEffect(() => {
     try {
@@ -821,11 +830,19 @@ function AppInner() {
 
       <div className="topbar">
         <div className="left">
-          <div className="field" style={{ minWidth: 160 }}>
+          <div className="field" style={{ width: 160, minWidth: 160, flex: 'none' }}>
             <label>Method</label>
-            <select value={transport} onChange={(e) => setTransport(e.target.value as TransportMode)}>
+            <select
+              style={{ width: '100%' }}
+              value={transport}
+              onChange={(e) => setTransport(e.target.value as TransportMode)}
+              disabled={mockOnly}
+              title={mockOnly ? 'This scenario runs in Mocked mode only' : undefined}
+            >
               <option value="mock">Mocked</option>
-              <option value="sse">Interledger TestNet</option>
+              <option value="sse" disabled={mockOnly}>
+                Interledger TestNet
+              </option>
             </select>
           </div>
 
@@ -866,7 +883,7 @@ function AppInner() {
             <div className="speed">
               <span className="speedLabel">Speed</span>
               <div className="speedPresets">
-                {[0.1, 0.5, 1, 2, 3].map((s) => (
+                {[0.1, 0.25, 0.5, 1, 2].map((s) => (
                   <button
                     key={s}
                     className={`speedPreset ${speed === s ? 'active' : ''}`}
@@ -876,6 +893,17 @@ function AppInner() {
                   </button>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {/* Absolutely positioned so it sits just right of the speed control without reflowing
+              the buttons/speed — keeps the topbar layout identical across scenarios. */}
+          {mockOnly ? (
+            <div className="mockOnlyNote" role="note">
+              <span className="mockOnlyBadge">Mocked only</span>
+              <span className="mockOnlyText">
+                {flow.mockOnlyReason ?? 'This scenario is illustrative and can’t run against the live TestNet.'}
+              </span>
             </div>
           ) : null}
         </div>

@@ -68,6 +68,12 @@ export type FlowDefinition = {
   nodes: FlowNode[]
   edges: FlowEdge[]
   steps: FlowStep[]
+  // Illustrative scenarios that the real runner can't execute (e.g. multi-recipient split
+  // payments, which the single-sequence runner doesn't support). When true, the UI blocks the
+  // live TestNet transport and explains why. Optional, omit for fully runnable scenarios.
+  mockOnly?: boolean
+  // Shown to the user when `mockOnly` is true, to explain why live execution is unavailable.
+  mockOnlyReason?: string
 }
 
 // Maps a scenario's semantic flow stages to its concrete step ids, plus the amounts/interval
@@ -90,6 +96,27 @@ export type FlowExecutionSpec = {
   incomingAmount: { value: string; assetCode: string; assetScale: number }
   // ISO 8601 repeating interval for a recurring outgoing-payment grant, e.g. "R12/<start>/P1M".
   outgoingInterval?: string
+  // Split-payment scenarios fan a single customer payment out to multiple recipients, each with
+  // its own incoming-payment, quote, and outgoing-payment. When present, the mock generator emits
+  // a branch per recipient instead of the single linear sequence; the shared stages above
+  // (walletResolve, quoteGrant, outgoingGrantInteractive, outgoingGrantContinue) are reused across
+  // all branches. The single incomingPayment/quote/outgoingPayment step ids above should point at
+  // the first recipient as a harmless fallback for any consumer that ignores `recipients`.
+  recipients?: SplitRecipient[]
+}
+
+export type SplitRecipient = {
+  // Stable key (e.g. 'merchant' | 'platform') — used to derive unique mock event ids per branch.
+  key: string
+  // Human label used in mock event prose.
+  label: string
+  incomingAmount: { value: string; assetCode: string; assetScale: number }
+  steps: {
+    incomingGrant: StepId
+    incomingPayment: StepId
+    quote: StepId
+    outgoingPayment: StepId
+  }
 }
 
 export type RunId = string

@@ -55,6 +55,7 @@ export function FlowNode({ data }: NodeProps<FlowNodeData>) {
   // to the entity colour when the resource isn't side-specific.
   const accentVar = getSideAccentVar(data.label)
   const accentColor = accentVar ? `var(${accentVar})` : entityColor
+  const statusDot = statusColor(data.status)
   // Agents read as sharp, heavy-bordered "engine" boxes; resources as soft pills with a side stripe.
   const shapeStyle = isAgent
     ? {
@@ -128,8 +129,8 @@ export function FlowNode({ data }: NodeProps<FlowNodeData>) {
             width: 10,
             height: 10,
             borderRadius: 999,
-            background: statusColor(data.status),
-            boxShadow: `0 0 18px ${statusColor(data.status)}`,
+            background: statusDot,
+            boxShadow: `0 0 18px ${statusDot}`,
           }}
         />
       </div>

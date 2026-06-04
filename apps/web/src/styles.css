@@ -38,6 +38,10 @@
   /* Payee-side servers (two-institution scenarios) — distinct from the payer-side hues above. */
   --entityAuthServerB: #c026d3;
   --entityResourceServerB: #0891b2;
+  /* Third-party (e.g. Platform fee in split payments) — an orange family, distinct from payer + payee-B. */
+  --entityPlatformWallet: #ea580c;
+  --entityAuthServerC: #c2410c;
+  --entityResourceServerC: #f59e0b;
   --entityPayment: #16a34a;
 }
 
@@ -121,7 +125,9 @@ a {
 .topbar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+  /* Align to the bottom so the center controls (Start/Consent/Pause/Speed) and the right badge
+     line up with the select boxes, which sit below their stacked labels in the .field columns. */
+  align-items: end;
   gap: 12px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
@@ -143,10 +149,48 @@ a {
 
 .topbar .center {
   justify-self: center;
+  position: relative;
 }
 
 .topbar .right {
   justify-self: end;
+}
+
+/* Note shown when a mock-only scenario is selected, explaining why live TestNet is disabled.
+   Absolutely positioned just right of the speed control so it never reflows the topbar — the
+   buttons/speed stay put across scenarios. */
+.mockOnlyNote {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: 240px;
+  padding: 3px 7px;
+  border: 1px solid rgba(234, 88, 12, 0.35);
+  background: rgba(234, 88, 12, 0.08);
+  border-radius: 7px;
+  pointer-events: none;
+}
+.mockOnlyBadge {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--entityPlatformWallet);
+  border: 1px solid rgba(234, 88, 12, 0.4);
+  border-radius: 999px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.mockOnlyText {
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--muted);
 }
 
 .scenarioPicker {

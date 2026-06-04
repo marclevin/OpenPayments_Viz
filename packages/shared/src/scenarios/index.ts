@@ -1,14 +1,16 @@
 import type { FlowDefinition, FlowExecutionSpec } from '../types.js'
 import { p2pExampleFlow } from './p2pExampleFlow.js'
+import { splitPaymentFlow, splitPaymentSpec } from './splitPaymentFlow.js'
 import { subscriptionFixedFlow, subscriptionFixedSpec } from './subscriptionFixedFlow.js'
 
 export * from './p2pExampleFlow.js'
+export * from './splitPaymentFlow.js'
 export * from './subscriptionFixedFlow.js'
 
 // Registry of all selectable scenarios. Adding a new teaching scenario is purely
 // data: author a FlowDefinition (with node/edge/step descriptions and per-step
 // nodeRoles) and append it here — no app logic changes required.
-export const scenarios: FlowDefinition[] = [p2pExampleFlow, subscriptionFixedFlow]
+export const scenarios: FlowDefinition[] = [p2pExampleFlow, subscriptionFixedFlow, splitPaymentFlow]
 
 export const defaultScenarioId = p2pExampleFlow.id
 
@@ -36,6 +38,7 @@ const openPaymentsExampleSpec: FlowExecutionSpec = {
 const executionSpecs: Record<string, FlowExecutionSpec> = {
   [openPaymentsExampleSpec.scenarioId]: openPaymentsExampleSpec,
   [subscriptionFixedSpec.scenarioId]: subscriptionFixedSpec,
+  [splitPaymentSpec.scenarioId]: splitPaymentSpec,
 }
 
 export function getExecutionSpec(scenarioId: string | undefined): FlowExecutionSpec {

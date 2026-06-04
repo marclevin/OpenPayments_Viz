@@ -30,7 +30,10 @@
       "Bash(curl -s -o /dev/null -w \"http %{http_code}\\\\n\" http://localhost:5173/)",
       "Read(//tmp/**)",
       "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3344,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; '\\\\''stopped'\\\\''')",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx --yes tsx -e ' *)",
+      "Bash(npx --yes tsx __verify_split.mts)",
+      "Bash(npx --yes tsx __verify_split2.mts)"
     ]
   }
 }
