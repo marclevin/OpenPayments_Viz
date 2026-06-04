@@ -16,8 +16,7 @@ You can explore it two ways:
 ## Repository layout (npm workspaces)
 
 - `packages/shared` — the flow DSL, scenario definitions, and the event schema shared by the
-  runner and the web app. **Adding a teaching scenario is pure data** (a `FlowDefinition` plus
-  an execution spec) — no app logic changes.
+  runner and the web app.
 - `apps/runner` — a local Node service (Express + SSE). It executes the Open Payments flow
   against TestNet and streams structured events to the UI. It reads your private key from disk
   and **never sends it to the browser**.
