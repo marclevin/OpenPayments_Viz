@@ -62,7 +62,60 @@ a {
 .app {
   height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
+}
+
+/* Branded header band sitting above the control toolbar. */
+.brandbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(0, 59, 92, 0.05), rgba(0, 59, 92, 0.015));
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+/* The node/flow glyph — strokes inherit currentColor, set on the mark. */
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 59, 92, 0.12);
+  color: rgba(0, 59, 92, 0.55);
+  flex: none;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+
+.brandTitle {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--uctBlue);
+  white-space: nowrap;
+}
+.brandTitle .brandAccent {
+  color: var(--uctBlue);
+  border-bottom: 2.5px solid var(--uctGold);
+  padding-bottom: 1px;
 }
 
 .topbar {

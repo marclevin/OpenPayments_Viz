@@ -86,7 +86,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Outgoing Payment',
       position: { x: 1060, y: 70 },
       description:
-        'An outgoing-payment moves money out of the Customer Wallet. It references the quote and the provider’s incoming-payment. This first one is the month-1 payment; the recurring grant pre-authorizes the next 11.',
+        'An outgoing-payment is an instruction to the customer’s account-servicing entity (the Resource Server) to make a payment — creating it does not move money by itself. It references the quote and the provider’s incoming-payment. This first one is the month-1 instruction; the recurring grant pre-authorizes the next 11. The account-servicing entity settles each transfer out of band.',
     },
   ],
   edges: [
@@ -158,7 +158,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Grant (recurring outgoing)',
       stepId: 'sub-grant-outgoing-interactive',
       description:
-        'The Client requests an interactive outgoing-payment grant carrying limits (debitAmount) and an interval (R12/…/P1M) — permission to pay $15 once a month for 12 months. Because money moves, the Auth Server returns a consent redirect instead of a token.',
+        'The Client requests an interactive outgoing-payment grant carrying limits (debitAmount) and an interval (R12/…/P1M) — permission to pay $15 once a month for 12 months. Because it authorizes real payments, the Auth Server returns a consent redirect instead of a token.',
     },
     {
       id: 'e-sub-consent',
@@ -206,7 +206,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       target: 'quote',
       label: 'creates',
       description:
-        'The quote is created and hosted on the Customer\’s Resource Server. The Client’s "Create Quote" request lands here, and the server materialises the firm price the customer will pay.',
+        'The quote is created and hosted on the Customer’s Resource Server. The Client’s "Create Quote" request lands here, and the server materialises the firm price the customer will pay.',
     },
     {
       id: 'e-sub-create-op',
@@ -215,7 +215,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       target: 'outgoingPayment',
       label: 'creates',
       description:
-        'The outgoing-payment is created and hosted on the Customer\’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server materialises the payment that moves $15.00 out of the Customer Wallet.',
+        'The outgoing-payment is created and hosted on the Customer’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server records the payment instruction. The customer’s account-servicing entity then performs the actual $15.00 transfer out of band.',
     },
   ],
   steps: [
@@ -309,7 +309,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
         client:
           'The Client requests permission to charge the customer $15 a month for 12 months, sending the limits and interval.',
         customerAuth:
-          'Because real money will move, the Customer\’s Auth Server won’t auto-approve. It returns a consent redirect; approving it authorizes all 12 payments at once.',
+          'Because a real payment is being authorized, the Customer’s Auth Server won’t auto-approve. It returns a consent redirect; approving it authorizes all 12 payments at once.',
       },
     },
     {
@@ -334,11 +334,11 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerResource', 'outgoingPayment'],
       involvedEdgeIds: ['e-sub-op', 'e-sub-create-op'],
       description:
-        'The Client creates the first outgoing-payment on the Customer\’s Resource Server using the quote. This sends month 1 of the subscription; the money leaves the Customer Wallet and arrives at the provider’s incoming-payment.',
+        'The Client creates the first outgoing-payment instruction on the Customer’s Resource Server using the quote. This records month 1 of the subscription; the customer’s account-servicing entity then settles the transfer, so $15 leaves the Customer Wallet and reaches the provider’s incoming-payment.',
       nodeRoles: {
-        client: 'The Client uses the recurring token and the quote to create the first month’s outgoing-payment.',
-        customerResource: 'The Customer Resource Server executes the transfer, creating the outgoing-payment.',
-        outgoingPayment: 'The outgoing-payment is created here — month 1 of 12 leaves the Customer Wallet.',
+        client: 'The Client uses the recurring token and the quote to create the first month’s outgoing-payment instruction.',
+        customerResource: 'The Customer Resource Server records the outgoing-payment instruction; its account-servicing entity carries out the transfer.',
+        outgoingPayment: 'The outgoing-payment instruction is created here — month 1 of 12. The funds leave the Customer Wallet only once the account-servicing entity settles it.',
       },
     },
     {
@@ -353,8 +353,8 @@ export const subscriptionFixedFlow: FlowDefinition = {
       nodeRoles: {
         client:
           'Each interval the Client repeats create-incoming-payment, create-quote, and create-outgoing-payment — reusing the same recurring grant.',
-        customerWallet: 'The Customer Wallet is debited $15 again each month, automatically, without re-approving.',
-        outgoingPayment: 'A fresh outgoing-payment is created every month for 11 more months.',
+        customerWallet: 'A fresh payment is instructed against the Customer Wallet each month automatically, without re-approving; the account-servicing entity settles each one.',
+        outgoingPayment: 'A fresh outgoing-payment instruction is created every month for 11 more months.',
         incomingPayment: 'A fresh incoming-payment ($15 fixed) is created on the provider each month.',
       },
     },

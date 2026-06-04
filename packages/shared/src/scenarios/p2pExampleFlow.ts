@@ -11,7 +11,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Client',
       position: { x: 0, y: 230 },
       description:
-        'The Client is the program driving the payment (here, the runner). It holds a private key and signs every request so servers can verify who is calling. It talks to wallet addresses, the Auth Server, and the Resource Server to move money on the sender’s behalf.',
+        'The Client is the program driving the payment (here, the runner). It holds a private key and signs every request so servers can verify who is calling. It talks to wallet addresses, the Auth Server, and the Resource Server to arrange a payment on the sender’s behalf. Open Payments is an instruction layer: the Client never moves money itself, it asks the account-servicing entities to.',
     },
     {
       id: 'senderWallet',
@@ -35,7 +35,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Auth Server',
       position: { x: 580, y: 180 },
       description:
-        'The Auth Server implements GNAP (Grant Negotiation and Authorization Protocol). It decides whether the Client may act and hands back an access token. Some actions are granted automatically; spending money requires the wallet owner to approve interactively.',
+        'The Auth Server implements GNAP (Grant Negotiation and Authorization Protocol). It decides whether the Client may act and hands back an access token. Some actions are granted automatically; authorizing a payment requires the wallet owner to approve interactively.',
     },
     {
       id: 'resource',
@@ -67,7 +67,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Outgoing Payment',
       position: { x: 860, y: 0 },
       description:
-        'An outgoing-payment is the resource that actually moves money out of the Sender Wallet. It references the quote for the price and the incoming-payment as the destination, and it can only be created after the sender has consented.',
+        'An outgoing-payment is an instruction to the sender’s account-servicing entity (the Resource Server) to make a payment — creating it does not move money by itself. It references the quote for the price and the incoming-payment as the destination, and it can only be created after the sender has consented. The account-servicing entity then settles the actual transfer out of band.',
     },
   ],
   edges: [
@@ -139,7 +139,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Grant (outgoing)',
       stepId: 'step-grant-outgoing-interactive',
       description:
-        'The Client requests a grant to create an outgoing-payment. Because this spends real money, the Auth Server requires interactive consent and replies with a redirect link instead of a token.',
+        'The Client requests a grant to create an outgoing-payment. Because this authorizes a real payment, the Auth Server requires interactive consent and replies with a redirect link instead of a token.',
     },
     {
       id: 'e-consent',
@@ -169,7 +169,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Create Outgoing Payment',
       stepId: 'step-outgoing-payment',
       description:
-        'Holding the consented token, the Client POSTs to the sender’s Resource Server to create the outgoing-payment, which moves the money using the quote and the incoming-payment as destination.',
+        'Holding the consented token, the Client POSTs to the sender’s Resource Server to create the outgoing-payment instruction, referencing the quote and the incoming-payment as destination. The sender’s account-servicing entity then carries out the actual transfer.',
     },
     {
       id: 'e-create-ip',
@@ -196,7 +196,7 @@ export const p2pExampleFlow: FlowDefinition = {
       target: 'outgoingPayment',
       label: 'creates',
       description:
-        'The outgoing-payment resource is created and hosted on the sender’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server materialises the payment that moves the money.',
+        'The outgoing-payment resource is created and hosted on the sender’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server records the payment instruction. The actual money movement is performed separately by the sender’s account-servicing entity.',
     },
   ],
   steps: [
@@ -242,7 +242,7 @@ export const p2pExampleFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'resource', 'incomingPayment'],
       involvedEdgeIds: ['e-ip', 'e-create-ip'],
       description:
-        'The Client creates the incoming-payment resource on the receiver’s Resource Server and gets back its public details — this is where the money will land.',
+        'The Client creates the incoming-payment resource on the receiver’s Resource Server and gets back its public details — this is the destination the payment will be directed to.',
       nodeRoles: {
         client:
           'The Client presents the token it just got and asks the receiver’s Resource Server to create the incoming-payment.',
@@ -294,12 +294,12 @@ export const p2pExampleFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'auth'],
       involvedEdgeIds: ['e-grant-out', 'e-consent'],
       description:
-        'The Client requests an interactive grant for the outgoing-payment. The Auth Server returns a redirect so the sender can consent to spending their money.',
+        'The Client requests an interactive grant for the outgoing-payment. The Auth Server returns a redirect so the sender can consent to the payment.',
       nodeRoles: {
         client:
-          'The Client requests permission to actually send money. Spending requires the sender’s consent, so it cannot get a token straight away.',
+          'The Client requests permission to instruct a real payment. Authorizing it requires the sender’s consent, so it cannot get a token straight away.',
         auth:
-          'Because real money will move, the sender’s Auth Server refuses to auto-approve and instead returns a redirect URL for the sender to consent.',
+          'Because a real payment is being authorized, the sender’s Auth Server refuses to auto-approve and instead returns a redirect URL for the sender to consent.',
       },
     },
     {
@@ -326,14 +326,14 @@ export const p2pExampleFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'resource', 'outgoingPayment'],
       involvedEdgeIds: ['e-op', 'e-create-op'],
       description:
-        'The Client creates the outgoing-payment on the sender’s Resource Server, which actually moves the money using the quote and the incoming-payment as the destination.',
+        'The Client creates the outgoing-payment on the sender’s Resource Server, recording the instruction to pay — referencing the quote and the incoming-payment as the destination. The sender’s account-servicing entity then settles the transfer out of band.',
       nodeRoles: {
         client:
-          'The Client presents the consented token and asks the sender’s Resource Server to create the outgoing-payment.',
+          'The Client presents the consented token and asks the sender’s Resource Server to create the outgoing-payment instruction.',
         resource:
-          'The sender’s Resource Server executes the transfer, creating the outgoing-payment against the quote.',
+          'The sender’s Resource Server records the outgoing-payment instruction against the quote; its account-servicing entity performs the actual transfer afterwards.',
         outgoingPayment:
-          'The outgoing-payment is created here — the moment money actually leaves the Sender Wallet toward the incoming-payment.',
+          'The outgoing-payment instruction is created here. Money leaves the Sender Wallet only when the account-servicing entity acts on it — not at creation time.',
       },
     },
   ],

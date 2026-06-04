@@ -800,6 +800,25 @@ function AppInner() {
 
   return (
     <div className="app">
+      <header className="brandbar">
+        <div className="brand">
+          <span className="brandMark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7 8 L21 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M7 20 L21 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="7" cy="8" r="3.5" fill="var(--uctBlue)" />
+              <circle cx="7" cy="20" r="3.5" fill="var(--uctBlue)" />
+              <circle cx="21" cy="14" r="4" fill="var(--uctGold)" />
+            </svg>
+          </span>
+          <div className="brandText">
+            <span className="brandTitle">
+              Open Payments <span className="brandAccent">Visualizer</span>
+            </span>
+          </div>
+        </div>
+      </header>
+
       <div className="topbar">
         <div className="left">
           <div className="field" style={{ minWidth: 160 }}>
