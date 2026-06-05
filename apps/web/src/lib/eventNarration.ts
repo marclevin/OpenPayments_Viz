@@ -141,18 +141,29 @@ export function humanizeEvent(e: RunnerEvent, _flow: FlowDefinition): EventNarra
         icon: 'create',
       }
 
-    case 'quote.created':
+    case 'quote.created': {
+      // The quote fixes one side and derives the other (the converted amount, after FX + fees).
+      // In the web mock the derived side is an illustrative estimate, flagged via approxSide and
+      // rendered with a leading "≈".
+      const approx = (side: 'debit' | 'receive', text: string) =>
+        e.approxSide === side ? `≈ ${text}` : text
       return {
         actor: 'Client',
         actorColorVar: colorFor('Client', 'client'),
         sentence: 'Client created a Quote',
         facts: [
-          ...(e.debitAmount ? [{ label: 'Debit', value: fmtAmount(e.debitAmount), tone: 'asset' as const }] : []),
+          ...(e.debitAmount
+            ? [{ label: 'Debit', value: approx('debit', fmtAmount(e.debitAmount)), tone: 'asset' as const }]
+            : []),
+          ...(e.receiveAmount
+            ? [{ label: 'Receive', value: approx('receive', fmtAmount(e.receiveAmount)), tone: 'asset' as const }]
+            : []),
           { label: 'Resource', value: resourcePath(e.resourceId), tone: 'code' as const },
         ],
         keyField: 'debitAmount',
         icon: 'create',
       }
+    }
 
     case 'outgoingPayment.created':
       return {

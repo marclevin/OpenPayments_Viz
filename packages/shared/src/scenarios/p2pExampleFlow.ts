@@ -3,7 +3,7 @@ import type { FlowDefinition } from '../types.js'
 export const p2pExampleFlow: FlowDefinition = {
   id: 'p2p-example',
   title: 'One Time P2P Payment',
-  description: 'A simple one-time peer-to-peer payment flow. Sender Wallet pays Receiver Wallet 10.00 USD fixed (Receiver always gets exactly 10.00 USD).',
+  description: 'A simple one-time peer-to-peer payment flow with a fixed SEND amount. The Sender Wallet is debited exactly $10.00 USD; the Receiver Wallet (a EUR account) gets whatever that converts to (≈€8.58), so the sender covers the currency conversion. The incoming-payment is left open-ended and the quote pins the sender’s debit.',
   nodes: [
     {
       id: 'client',
@@ -51,7 +51,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Incoming Payment',
       position: { x: 860, y: 430 },
       description:
-        'An incoming-payment is a resource on the receiver’s Resource Server that says "this account is expecting money." It defines how much to receive and becomes the destination the payment is sent to.',
+        'An incoming-payment is a resource on the receiver’s Resource Server that says "this account is expecting money," and it becomes the destination the payment is sent to. In this fixed-send flow it is created open-ended (no incomingAmount), so the receiver accepts whatever the quote delivers in their own currency.',
     },
     {
       id: 'quote',
@@ -59,7 +59,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Quote',
       position: { x: 860, y: 110 },
       description:
-        'A quote is a firm price for the transfer, created on the sender’s Resource Server. It locks in how much will be debited from the sender to deliver the requested amount to the receiver, including any fees or currency conversion.',
+        'A quote is a firm price for the transfer, created on the sender’s Resource Server. Here the quote is given a fixed debitAmount ($10.00 USD), so it locks the sender’s cost and works out the resulting receiveAmount the receiver gets after fees and currency conversion (≈€8.58).',
     },
     {
       id: 'outgoingPayment',
@@ -129,7 +129,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Create Quote',
       stepId: 'step-quote',
       description:
-        'With the quote grant’s token, the Client asks the sender’s Resource Server to create a quote — a firm price for delivering the requested amount to the incoming-payment.',
+        'With the quote grant’s token, the Client asks the sender’s Resource Server to create a quote with a fixed $10.00 debitAmount — a firm price that pins the sender’s cost and derives what the incoming-payment receives.',
     },
     {
       id: 'e-grant-out',
@@ -276,14 +276,14 @@ export const p2pExampleFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'resource', 'quote'],
       involvedEdgeIds: ['e-quote', 'e-create-q'],
       description:
-        'The Client creates the quote on the sender’s Resource Server, fixing the debit amount needed to deliver the payment to the incoming-payment.',
+        'The Client creates the quote on the sender’s Resource Server with a fixed $10.00 debitAmount. The quote pins what the sender pays and derives what the receiver gets (≈€8.58 after conversion).',
       nodeRoles: {
         client:
-          'The Client uses the quote token to ask the sender’s Resource Server for a firm price for the transfer.',
+          'The Client uses the quote token to ask the sender’s Resource Server for a firm price, naming the fixed $10.00 it wants to debit.',
         resource:
-          'The sender’s Resource Server works out the cost (including any fees or conversion) and returns the quote.',
+          'The sender’s Resource Server works out the resulting receive amount (including any fees or conversion) and returns the quote.',
         quote:
-          'The quote is created here, locking in exactly how much the sender will be debited.',
+          'The quote is created here, locking the sender’s $10.00 debit and the EUR amount the receiver will get.',
       },
     },
     {

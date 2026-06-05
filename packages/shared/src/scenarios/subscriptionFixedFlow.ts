@@ -1,12 +1,14 @@
 import type { FlowDefinition, FlowExecutionSpec } from '../types.js'
 
-// Recurring fixed-amount subscription: a Customer authorizes 12 monthly payments of exactly
-// $15.00 to a Service Provider. Two distinct institutions are involved, so the graph models a
-// Customer side and a Service-Provider side, each with its own Auth Server and Resource Server.
+// Recurring fixed-amount subscription: a Customer authorizes 12 monthly payments to a Service
+// Provider who collects exactly €15.00 each period. The customer's account is in USD, so their
+// bank debits the converted amount (≈$17.48) each month. Two distinct institutions are involved,
+// so the graph models a Customer side and a Service-Provider side, each with its own Auth Server
+// and Resource Server.
 export const subscriptionFixedFlow: FlowDefinition = {
   id: 'subscription-fixed',
   title: 'Recurring Subscription (fixed amount)',
-  description: 'A recurring subscription flow with fixed amounts. A Customer authorizes 12 monthly payments of exactly $15.00 to a Service Provider. Two distinct institutions are involved, so the graph models a Customer side and a Service Provider side, each with its own Auth Server and Resource Server.',
+  description: 'A recurring subscription with a fixed RECEIVE amount. A Customer authorizes 12 monthly payments to a Service Provider who is paid exactly €15.00 each period. The customer’s account is in USD, so their bank debits the converted cost (≈$17.48) each month. Two distinct institutions are involved, so the graph models a Customer side and a Service Provider side, each with its own Auth Server and Resource Server.',
   nodes: [
     {
       id: 'client',
@@ -22,7 +24,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Customer Wallet',
       position: { x: 330, y: 30 },
       description:
-        'The Customer Wallet is the public URL of the subscriber who pays. Fetching it reveals the customer’s Auth Server, Resource Server, and currency. This is the account the $15 will be debited from each month.',
+        'The Customer Wallet is the public URL of the subscriber who pays. Fetching it reveals the customer’s Auth Server, Resource Server, and currency (USD). This is the account that is debited each month — the converted cost (≈$17.48) of the €15.00 charge.',
     },
     {
       id: 'spWallet',
@@ -30,7 +32,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Service Provider Wallet',
       position: { x: 330, y: 660 },
       description:
-        'The Service Provider Wallet is the public URL of the business being paid. Fetching it tells the Client where to create the incoming-payment and which servers the provider trusts. It receives exactly $15 each billing period.',
+        'The Service Provider Wallet is the public URL of the business being paid. Fetching it tells the Client where to create the incoming-payment and which servers the provider trusts. It receives exactly €15.00 each billing period.',
     },
     {
       id: 'customerAuth',
@@ -62,7 +64,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Service Provider Resource Server',
       position: { x: 700, y: 480 },
       description:
-        'The Service Provider Resource Server is the provider wallet’s API, where the incoming-payment that will receive the $15 is created.',
+        'The Service Provider Resource Server is the provider wallet’s API, where the incoming-payment that will receive the €15.00 is created.',
     },
     {
       id: 'incomingPayment',
@@ -70,7 +72,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Incoming Payment',
       position: { x: 1060, y: 600 },
       description:
-        'An incoming-payment is a resource on the Service Provider Resource Server expecting money. Here it has a fixed incomingAmount of $15.00, so the provider receives exactly that each period.',
+        'An incoming-payment is a resource on the Service Provider Resource Server expecting money. Here it has a fixed incomingAmount of €15.00, so the provider receives exactly that each period.',
     },
     {
       id: 'quote',
@@ -78,7 +80,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Quote',
       position: { x: 1060, y: 250 },
       description:
-        'A quote is a firm price created on the Customer Resource Server. It locks in the debitAmount the customer pays to deliver $15.00 to the provider’s incoming-payment, including any fees or conversion.',
+        'A quote is a firm price created on the Customer Resource Server. It locks in the debitAmount the customer pays (≈$17.48) to deliver €15.00 to the provider’s incoming-payment, including any fees or conversion.',
     },
     {
       id: 'outgoingPayment',
@@ -128,7 +130,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Create Incoming Payment',
       stepId: 'sub-incoming-payment',
       description:
-        'Using that token, the Client creates the incoming-payment with a fixed incomingAmount of $15.00 on the Service Provider Resource Server.',
+        'Using that token, the Client creates the incoming-payment with a fixed incomingAmount of €15.00 on the Service Provider Resource Server.',
     },
     {
       id: 'e-sub-grant-quote',
@@ -148,7 +150,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Create Quote',
       stepId: 'sub-quote',
       description:
-        'With the quote token, the Client asks the Customer Resource Server to price delivering $15.00 to the provider’s incoming-payment. The response includes the debitAmount the customer will pay.',
+        'With the quote token, the Client asks the Customer Resource Server to price delivering €15.00 to the provider’s incoming-payment. The response includes the debitAmount the customer will pay (≈$17.48).',
     },
     {
       id: 'e-sub-grant-out',
@@ -158,7 +160,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Grant (recurring outgoing)',
       stepId: 'sub-grant-outgoing-interactive',
       description:
-        'The Client requests an interactive outgoing-payment grant carrying limits (debitAmount) and an interval (R12/…/P1M) — permission to pay $15 once a month for 12 months. Because it authorizes real payments, the Auth Server returns a consent redirect instead of a token.',
+        'The Client requests an interactive outgoing-payment grant carrying limits (debitAmount, in the customer’s USD) and an interval (R12/…/P1M) — permission to pay the €15.00 charge (≈$17.48) once a month for 12 months. Because it authorizes real payments, the Auth Server returns a consent redirect instead of a token.',
     },
     {
       id: 'e-sub-consent',
@@ -197,7 +199,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       target: 'incomingPayment',
       label: 'creates',
       description:
-        'The incoming-payment ($15.00 fixed) is created and hosted on the Service Provider\’s Resource Server. The Client’s "Create Incoming Payment" request lands here, and the server materialises the destination resource.',
+        'The incoming-payment (€15.00 fixed) is created and hosted on the Service Provider\’s Resource Server. The Client’s "Create Incoming Payment" request lands here, and the server materialises the destination resource.',
     },
     {
       id: 'e-sub-create-q',
@@ -215,7 +217,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       target: 'outgoingPayment',
       label: 'creates',
       description:
-        'The outgoing-payment is created and hosted on the Customer’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server records the payment instruction. The customer’s account-servicing entity then performs the actual $15.00 transfer out of band.',
+        'The outgoing-payment is created and hosted on the Customer’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server records the payment instruction. The customer’s account-servicing entity then performs the actual transfer out of band — debiting ≈$17.48 to deliver €15.00 to the provider.',
     },
   ],
   steps: [
@@ -255,16 +257,16 @@ export const subscriptionFixedFlow: FlowDefinition = {
     {
       id: 'sub-incoming-payment',
       kind: 'incomingPayment.create',
-      title: 'Create incoming payment ($15 fixed)',
+      title: 'Create incoming payment (€15 fixed)',
       group: 'Incoming payment',
       involvedNodeIds: ['client', 'spResource', 'incomingPayment'],
       involvedEdgeIds: ['e-sub-ip', 'e-sub-create-ip'],
       description:
-        'The Client creates the incoming-payment with a fixed incomingAmount of $15.00 on the Service Provider\’s Resource Server — guaranteeing the provider receives exactly $15 this period.',
+        'The Client creates the incoming-payment with a fixed incomingAmount of €15.00 on the Service Provider\’s Resource Server — guaranteeing the provider receives exactly €15.00 this period.',
       nodeRoles: {
-        client: 'The Client presents its token and requests the incoming-payment with incomingAmount $15.00.',
+        client: 'The Client presents its token and requests the incoming-payment with incomingAmount €15.00.',
         spResource: 'The Service Provider Resource Server creates the incoming-payment resource.',
-        incomingPayment: 'The incoming-payment is created here — the $15 destination for this billing period.',
+        incomingPayment: 'The incoming-payment is created here — the €15.00 destination for this billing period.',
       },
     },
     {
@@ -289,11 +291,11 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerResource', 'quote'],
       involvedEdgeIds: ['e-sub-quote', 'e-sub-create-q'],
       description:
-        'The Client creates a quote on the Customer Resource Server, naming the provider’s incoming-payment as receiver. The quote fixes the debitAmount the customer pays to deliver $15.00.',
+        'The Client creates a quote on the Customer Resource Server, naming the provider’s incoming-payment as receiver. The quote derives the debitAmount the customer pays (≈$17.48) to deliver the fixed €15.00.',
       nodeRoles: {
-        client: 'The Client asks for a firm price to send $15 to the provider’s incoming-payment.',
-        customerResource: 'The Customer Resource Server computes the cost and returns the quote.',
-        quote: 'The quote is created here, locking in the customer’s debit amount for this payment.',
+        client: 'The Client asks for a firm price to deliver €15.00 to the provider’s incoming-payment.',
+        customerResource: 'The Customer Resource Server computes the cost (≈$17.48 after conversion) and returns the quote.',
+        quote: 'The quote is created here, locking in the customer’s USD debit amount for this payment.',
       },
     },
     {
@@ -304,10 +306,10 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerAuth'],
       involvedEdgeIds: ['e-sub-grant-out', 'e-sub-consent'],
       description:
-        'The Client requests an interactive outgoing-payment grant with limits (debitAmount) and an interval of R12/…/P1M — pay $15 monthly for 12 months. The Customer Auth Server returns a redirect for the customer to consent once.',
+        'The Client requests an interactive outgoing-payment grant with limits (debitAmount, in USD) and an interval of R12/…/P1M — pay the €15.00 charge (≈$17.48) monthly for 12 months. The Customer Auth Server returns a redirect for the customer to consent once.',
       nodeRoles: {
         client:
-          'The Client requests permission to charge the customer $15 a month for 12 months, sending the limits and interval.',
+          'The Client requests permission to charge the customer the €15.00 fee (≈$17.48) a month for 12 months, sending the limits and interval.',
         customerAuth:
           'Because a real payment is being authorized, the Customer’s Auth Server won’t auto-approve. It returns a consent redirect; approving it authorizes all 12 payments at once.',
       },
@@ -334,7 +336,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerResource', 'outgoingPayment'],
       involvedEdgeIds: ['e-sub-op', 'e-sub-create-op'],
       description:
-        'The Client creates the first outgoing-payment instruction on the Customer’s Resource Server using the quote. This records month 1 of the subscription; the customer’s account-servicing entity then settles the transfer, so $15 leaves the Customer Wallet and reaches the provider’s incoming-payment.',
+        'The Client creates the first outgoing-payment instruction on the Customer’s Resource Server using the quote. This records month 1 of the subscription; the customer’s account-servicing entity then settles the transfer, so ≈$17.48 leaves the Customer Wallet and €15.00 reaches the provider’s incoming-payment.',
       nodeRoles: {
         client: 'The Client uses the recurring token and the quote to create the first month’s outgoing-payment instruction.',
         customerResource: 'The Customer Resource Server records the outgoing-payment instruction; its account-servicing entity carries out the transfer.',
@@ -349,13 +351,13 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerWallet', 'outgoingPayment', 'incomingPayment'],
       involvedEdgeIds: [],
       description:
-        'No new grants are needed for the remaining 11 months. The recurring grant stays valid, so each month the Client simply repeats three steps: create a new incoming-payment ($15), create a quote, and create an outgoing-payment. If a token expires, it can be rotated without re-consent.',
+        'No new grants are needed for the remaining 11 months. The recurring grant stays valid, so each month the Client simply repeats three steps: create a new incoming-payment (€15.00), create a quote, and create an outgoing-payment. If a token expires, it can be rotated without re-consent.',
       nodeRoles: {
         client:
           'Each interval the Client repeats create-incoming-payment, create-quote, and create-outgoing-payment — reusing the same recurring grant.',
         customerWallet: 'A fresh payment is instructed against the Customer Wallet each month automatically, without re-approving; the account-servicing entity settles each one.',
         outgoingPayment: 'A fresh outgoing-payment instruction is created every month for 11 more months.',
-        incomingPayment: 'A fresh incoming-payment ($15 fixed) is created on the provider each month.',
+        incomingPayment: 'A fresh incoming-payment (€15.00 fixed) is created on the provider each month.',
       },
     },
   ],
@@ -374,6 +376,10 @@ export const subscriptionFixedSpec: FlowExecutionSpec = {
     outgoingPayment: 'sub-outgoing-payment',
     recurring: 'sub-recurring',
   },
-  incomingAmount: { value: '1500', assetCode: 'USD', assetScale: 2 },
+  // Fixed-RECEIVE: the Service Provider collects exactly €15.00 each period and the customer's
+  // USD account is debited the variable converted amount (≈$17.48). The display hints drive the
+  // mock's "≈" USD estimate (1 EUR ≈ 1.165 USD); the real runner uses the live wallets + quote.
+  incomingAmount: { value: '1500', assetCode: 'EUR', assetScale: 2 },
+  display: { counterpartyAsset: { assetCode: 'USD', assetScale: 2 }, fxRate: 1.165 },
   outgoingInterval: 'R12/2025-10-14T00:03:00Z/P1M',
 }

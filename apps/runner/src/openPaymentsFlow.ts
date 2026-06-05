@@ -270,6 +270,10 @@ export async function runOpenPaymentsFlow(
       authServer: receivingWalletAddress.authServer
     })
 
+    // 'fixed-send' fixes the sender's debit (on the quote) and leaves the incoming payment
+    // open-ended; 'fixed-receive' (default) fixes the receiver's amount on the incoming payment.
+    const fixedSend = spec.amountMode === 'fixed-send'
+
     currentStepId = spec.steps.incomingPayment
     await waitIfPaused()
     const incomingPayment = await client.incomingPayment.create(
@@ -279,11 +283,16 @@ export async function runOpenPaymentsFlow(
       },
       {
         walletAddress: receivingWalletAddress.id,
-        incomingAmount: {
-          assetCode: receivingWalletAddress.assetCode,
-          assetScale: receivingWalletAddress.assetScale,
-          value: spec.incomingAmount.value
-        },
+        // Fixed-send: omit incomingAmount so the receiver gets whatever the quote delivers.
+        ...(fixedSend
+          ? {}
+          : {
+              incomingAmount: {
+                assetCode: receivingWalletAddress.assetCode,
+                assetScale: receivingWalletAddress.assetScale,
+                value: spec.incomingAmount!.value
+              }
+            }),
         metadata: {
           description: 'From OpenPayments flow visualizer runner'
         }
@@ -336,13 +345,27 @@ export async function runOpenPaymentsFlow(
       {
         walletAddress: sendingWalletAddress.id,
         receiver: incomingPayment.id,
-        method: 'ilp'
+        method: 'ilp',
+        // Fixed-send: the open incoming payment carries no amount, so the quote must name the
+        // sender's debit (in the sending wallet's currency). Fixed-receive: the incoming
+        // payment's incomingAmount drives the quote, so no amount is passed here.
+        ...(fixedSend
+          ? {
+              debitAmount: {
+                assetCode: sendingWalletAddress.assetCode,
+                assetScale: sendingWalletAddress.assetScale,
+                value: spec.debitAmount!.value
+              }
+            }
+          : {})
       }
     )
     emit({
       ...newEventBase(runId, 'quote.created', spec.steps.quote),
       resourceId: quote.id,
-      debitAmount: quote.debitAmount
+      // Both amounts are exact, straight from the quote — including the converted (variable) side.
+      debitAmount: quote.debitAmount,
+      receiveAmount: quote.receiveAmount
     })
 
     currentStepId = spec.steps.outgoingGrantInteractive

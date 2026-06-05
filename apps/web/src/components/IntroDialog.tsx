@@ -38,6 +38,11 @@ export function IntroDialog({ onClose }: { onClose: () => void }) {
             <strong>Mocked</strong> mode needs no setup — it's the best place to start. The graph's symbols
             and colours are explained in the <strong>Legend</strong> (top-right of the Flow panel).
           </p>
+          <p className="introHint">
+            <strong>A note on currencies:</strong> the explanations and amounts assume a <strong>USD sending
+            wallet</strong> and a <strong>EUR receiving wallet</strong>. The tool works with any currencies,
+            but if yours differ the help text and example figures won’t match your run.
+          </p>
         </div>
 
         <div className="introSection">

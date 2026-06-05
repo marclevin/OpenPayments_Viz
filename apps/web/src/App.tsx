@@ -1236,6 +1236,11 @@ function AppInner() {
                     open={openSections.addresses}
                     onToggle={() => setOpenSections((s) => ({ ...s, addresses: !s.addresses }))}
                   >
+                    <p className="hint">
+                      The explanations and amounts in this tool assume a <strong>USD sending wallet</strong> and
+                      a <strong>EUR receiving wallet</strong>. You can use any currencies, but if they differ from
+                      this the help text and example figures (e.g. “≈€8.58”) won’t match your run.
+                    </p>
                     <div className="grid2">
                       <div className="field">
                         <label>Client wallet address</label>

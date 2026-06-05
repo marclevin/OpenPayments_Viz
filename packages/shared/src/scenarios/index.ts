@@ -18,7 +18,10 @@ export function getScenarioById(id: string): FlowDefinition | undefined {
   return scenarios.find((s) => s.id === id)
 }
 
-// Execution spec for the original P2P one-time payment (canonical sequence, fixed $10 incoming).
+// Execution spec for the P2P one-time payment. Fixed-SEND: the sender is debited exactly
+// $10.00 USD and the receiver's (EUR) wallet gets whatever that converts to, so the sender
+// covers the currency conversion. The display hints drive the web mock's "≈" EUR estimate
+// (1 USD ≈ 0.858 EUR); the real runner uses the live wallets and the actual quote.
 const openPaymentsExampleSpec: FlowExecutionSpec = {
   scenarioId: p2pExampleFlow.id,
   steps: {
@@ -31,7 +34,9 @@ const openPaymentsExampleSpec: FlowExecutionSpec = {
     outgoingGrantContinue: 'step-grant-outgoing-continue',
     outgoingPayment: 'step-outgoing-payment',
   },
-  incomingAmount: { value: '1000', assetCode: 'USD', assetScale: 2 },
+  amountMode: 'fixed-send',
+  debitAmount: { value: '1000', assetCode: 'USD', assetScale: 2 },
+  display: { counterpartyAsset: { assetCode: 'EUR', assetScale: 2 }, fxRate: 0.858 },
 }
 
 // Maps each scenario to the execution spec used by the runner (real) and the web mock.

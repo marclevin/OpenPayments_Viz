@@ -89,6 +89,11 @@ panel) decodes the graph's symbols, colours, and arrow styles.
    **Consent**, approve in the tab that opens, and you'll be redirected back — the runner
    continues the grant and creates the payment automatically.
 
+> **A note on currencies.** This tool was designed with the **sender on a USD wallet** and the
+> **receiver on a EUR wallet** (so the scenarios can show currency conversion). You may use wallet
+> addresses in any currencies, but if they differ from USD → EUR the help text and example figures
+> (e.g. the P2P "≈€8.58" or the subscription "≈$17.48") will not match your actual run.
+
 ## TestNet setup
 
 1. Create an account in the **Interledger Test Wallet**

@@ -11,10 +11,47 @@ const RESOURCE = 'https://ilp.interledger-test.dev'
 // Fully-typed mock trace driven by a scenario's execution spec, with realistic live data so
 // the timeline/graph animate identically to a real run. Uses the spec's step ids and amount,
 // so any scenario sharing the canonical Open Payments sequence works without bespoke mock code.
+// Derives the two wallet currencies and the quote's debit/receive amounts for a mock run. Since
+// the mock has no real quote, the variable (converted) side is an illustrative FX estimate built
+// from spec.display; `approxSide` marks it so the timeline can render it with a "≈".
+function mockAmounts(spec: FlowExecutionSpec) {
+  const fixedSend = spec.amountMode === 'fixed-send'
+  const fixed = (fixedSend ? spec.debitAmount : spec.incomingAmount)!
+
+  // Without display hints both sides share the fixed currency and nothing is approximate.
+  const cpAsset = spec.display?.counterpartyAsset ?? { assetCode: fixed.assetCode, assetScale: fixed.assetScale }
+  const fxRate = spec.display?.fxRate ?? 1
+  const fixedMajor = Number(fixed.value) / 10 ** fixed.assetScale
+  const counterparty = {
+    assetCode: cpAsset.assetCode,
+    assetScale: cpAsset.assetScale,
+    value: Math.round(fixedMajor * fxRate * 10 ** cpAsset.assetScale).toString(),
+  }
+
+  // For fixed-send the sender's debit is the fixed side and the receiver's amount is derived;
+  // for fixed-receive it's the reverse.
+  const debitAmount = fixedSend ? fixed : counterparty
+  const receiveAmount = fixedSend ? counterparty : fixed
+  const approxSide: 'debit' | 'receive' | undefined = spec.display
+    ? fixedSend
+      ? 'receive'
+      : 'debit'
+    : undefined
+
+  return {
+    senderAsset: debitAmount,
+    receiverAsset: receiveAmount,
+    debitAmount,
+    receiveAmount,
+    approxSide,
+  }
+}
+
 export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): RunnerEvent[] {
   if (spec.recipients?.length) return makeSplitRunEvents(spec, consentUrl)
 
-  const { steps, incomingAmount } = spec
+  const { steps } = spec
+  const { senderAsset, receiverAsset, debitAmount, receiveAmount, approxSide } = mockAmounts(spec)
   return [
     { id: 'e1', runId: RUN_ID, ts: nowIso(), type: 'run.started', level: 'info' },
     {
@@ -29,8 +66,8 @@ export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): 
       authServer: AUTH,
       resourceServer: RESOURCE,
       resourceId: `${RESOURCE}/sending-wallet`,
-      assetCode: incomingAmount.assetCode,
-      assetScale: incomingAmount.assetScale,
+      assetCode: senderAsset.assetCode,
+      assetScale: senderAsset.assetScale,
     },
     {
       id: 'e2b',
@@ -44,8 +81,8 @@ export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): 
       authServer: AUTH,
       resourceServer: RESOURCE,
       resourceId: `${RESOURCE}/receiving-wallet`,
-      assetCode: incomingAmount.assetCode,
-      assetScale: incomingAmount.assetScale,
+      assetCode: receiverAsset.assetCode,
+      assetScale: receiverAsset.assetScale,
     },
     {
       id: 'e3',
@@ -102,7 +139,9 @@ export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): 
       stepId: steps.quote,
       level: 'info',
       resourceId: `${RESOURCE}/quotes/q_123`,
-      debitAmount: { assetCode: incomingAmount.assetCode, assetScale: incomingAmount.assetScale, value: incomingAmount.value },
+      debitAmount,
+      receiveAmount,
+      approxSide,
     },
     {
       id: 'e7',
@@ -164,7 +203,9 @@ export function makeMockConsentCompletionEvents(spec: FlowExecutionSpec): Runner
 // makeSplitConsentCompletionEvents after consent). Event ids are suffixed with the recipient key
 // so the dedupe-by-id in App.appendEvent never drops a second branch's events.
 function makeSplitRunEvents(spec: FlowExecutionSpec, consentUrl: string): RunnerEvent[] {
-  const { steps, incomingAmount, recipients = [] } = spec
+  // Split scenarios are always fixed-receive with a top-level incomingAmount (the customer total).
+  const { steps, recipients = [] } = spec
+  const incomingAmount = spec.incomingAmount!
   const events: RunnerEvent[] = [
     { id: 'sp-start', runId: RUN_ID, ts: nowIso(), type: 'run.started', level: 'info' },
     {

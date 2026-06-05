@@ -93,7 +93,29 @@ export type FlowExecutionSpec = {
     // Optional informational explainer step (e.g. recurring billing) — no network call.
     recurring?: StepId
   }
-  incomingAmount: { value: string; assetCode: string; assetScale: number }
+  // Which side of the payment is fixed:
+  //  - 'fixed-receive' (default): the receiver gets exactly `incomingAmount`; the quote derives
+  //    the (variable) debit the sender pays. This is the classic Open Payments invoice model.
+  //  - 'fixed-send': the sender is debited exactly `debitAmount`; the incoming payment is created
+  //    open-ended and the quote derives the (variable) amount the receiver gets.
+  amountMode?: 'fixed-receive' | 'fixed-send'
+  // The receiver's fixed amount. Required for 'fixed-receive'. The real runner uses the live
+  // receiving wallet's assetCode/assetScale and only takes the `value` from here.
+  incomingAmount?: { value: string; assetCode: string; assetScale: number }
+  // The sender's fixed debit. Required for 'fixed-send'. The real runner uses the live sending
+  // wallet's assetCode/assetScale and only takes the `value` from here.
+  debitAmount?: { value: string; assetCode: string; assetScale: number }
+  // Illustrative-only display hints for the web mock & timeline, which have no real quote to read
+  // the converted amount from. The real runner IGNORES these entirely — it renders the live
+  // wallet currencies and the actual quoted debit/receive amounts.
+  display?: {
+    // The variable side's currency (the side the quote derives): the receiver's currency for
+    // 'fixed-send', the sender's currency for 'fixed-receive'. Lets the mock show two currencies.
+    counterpartyAsset: { assetCode: string; assetScale: number }
+    // Approx units of `counterpartyAsset` per 1 major unit of the fixed side's currency, used to
+    // compute the "≈" converted figure in the mock (e.g. 0.858 EUR per USD, or 1.165 USD per EUR).
+    fxRate: number
+  }
   // ISO 8601 repeating interval for a recurring outgoing-payment grant, e.g. "R12/<start>/P1M".
   outgoingInterval?: string
   // Split-payment scenarios fan a single customer payment out to multiple recipients, each with
@@ -209,11 +231,22 @@ export type RunnerEvent =
   | (RunnerEventBase & {
       type: 'quote.created'
       resourceId: string
+      // What the sender is debited. Real and exact from the quote (real runner); for the web mock
+      // it is exact when the scenario fixes the send side, otherwise an FX estimate (see approxSide).
       debitAmount?: {
         assetCode: string
         assetScale: number
         value: string
       }
+      // What the receiver gets. Same exactness rules as debitAmount.
+      receiveAmount?: {
+        assetCode: string
+        assetScale: number
+        value: string
+      }
+      // Web-mock only: which amount is an illustrative FX estimate (the side the quote derives).
+      // The real runner omits this — both amounts come straight from the quote.
+      approxSide?: 'debit' | 'receive'
     })
   | (RunnerEventBase & {
       type: 'outgoingPayment.created'
