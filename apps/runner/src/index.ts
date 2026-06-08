@@ -1,9 +1,43 @@
 import crypto from 'node:crypto'
+import { createUnauthenticatedClient } from '@interledger/open-payments'
 import express from 'express'
-import type { RunnerEvent, RunId } from '@opviz/shared'
+import type { FlowExecutionSpec, RunnerEvent, RunId } from '@opviz/shared'
 import { getExecutionSpec } from '@opviz/shared'
 import { SseHub } from './sse.js'
 import { runOpenPaymentsFlow, type RunnerConfig } from './openPaymentsFlow.js'
+
+// Payment pointers ($host/path) are shorthand for https URLs; normalize so the OP client accepts them.
+function normalizeWalletAddressUrl(raw: string): string {
+  const v = raw.trim()
+  if (!v) return ''
+  if (v.startsWith('$')) return `https://${v.slice(1)}`
+  return v
+}
+
+function isAmount(a: unknown): a is { value: string; assetCode: string; assetScale: number } {
+  const x = a as any
+  return Boolean(x) && typeof x.value === 'string' && typeof x.assetCode === 'string' && typeof x.assetScale === 'number'
+}
+
+// Merge UI-supplied parameter overrides onto a registered spec. Only the fields the runner reads are
+// applied, each type-checked; step ids and structure always come from the base spec. The runner uses
+// the live wallet's currency, so any assetCode in an amount override is illustrative only.
+function applySpecOverrides(base: FlowExecutionSpec, overrides: unknown): FlowExecutionSpec {
+  if (!overrides || typeof overrides !== 'object') return base
+  const o = overrides as Record<string, unknown>
+  const next: FlowExecutionSpec = { ...base }
+  if (o.amountMode === 'fixed-send' || o.amountMode === 'fixed-receive') next.amountMode = o.amountMode
+  if (isAmount(o.incomingAmount)) next.incomingAmount = o.incomingAmount
+  if (isAmount(o.debitAmount)) next.debitAmount = o.debitAmount
+  if (typeof o.outgoingInterval === 'string') next.outgoingInterval = o.outgoingInterval
+  if (
+    Array.isArray(o.recipients) &&
+    o.recipients.every((r: any) => r && typeof r.key === 'string' && r.steps && isAmount(r.incomingAmount))
+  ) {
+    next.recipients = o.recipients as FlowExecutionSpec['recipients']
+  }
+  return next
+}
 
 const app = express()
 
@@ -59,6 +93,34 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, ts: nowIso() })
 })
 
+// Resolve a wallet address's public details (currency, servers) WITHOUT a key — wallet address
+// lookups are unauthenticated. Used by the UI to validate addresses and surface their currency
+// before a run (e.g. to warn when a wallet's currency differs from the scenario's assumption).
+let unauthClientPromise: ReturnType<typeof createUnauthenticatedClient> | undefined
+app.get('/resolve', async (req, res) => {
+  const raw = typeof req.query.url === 'string' ? req.query.url : ''
+  const url = normalizeWalletAddressUrl(raw)
+  if (!url) {
+    res.status(400).json({ error: 'Missing url query parameter' })
+    return
+  }
+  try {
+    unauthClientPromise ??= createUnauthenticatedClient({})
+    const client = await unauthClientPromise
+    const wa = await client.walletAddress.get({ url })
+    res.json({
+      id: wa.id,
+      assetCode: wa.assetCode,
+      assetScale: wa.assetScale,
+      authServer: wa.authServer,
+      resourceServer: wa.resourceServer
+    })
+  } catch (err) {
+    const e = err as any
+    res.status(502).json({ error: e?.message ? String(e.message) : 'Could not resolve wallet address' })
+  }
+})
+
 app.get('/events', (req, res) => {
   res.status(200)
   res.setHeader('Content-Type', 'text/event-stream')
@@ -81,7 +143,7 @@ app.get('/events', (req, res) => {
 })
 
 app.post('/run', (req, res) => {
-  const body = req.body as Partial<RunnerConfig> | undefined
+  const body = req.body as (Partial<RunnerConfig> & { specOverrides?: unknown }) | undefined
 
   const config: RunnerConfig = {
     clientWalletAddressUrl: String(body?.clientWalletAddressUrl ?? ''),
@@ -114,7 +176,11 @@ app.post('/run', (req, res) => {
   activeRunId = runId
   res.status(202).json({ runId })
 
-  const spec = getExecutionSpec(config.scenarioId)
+  // The UI may send parameter overrides (amount, mode, interval, split shares) from the scenario
+  // editor. Merge them onto the registered spec; step ids and structure stay from the base spec.
+  // Currency in any amount override is illustrative — the runner uses the live wallet's asset.
+  const baseSpec = getExecutionSpec(config.scenarioId)
+  const spec = applySpecOverrides(baseSpec, body?.specOverrides)
   void runOpenPaymentsFlow(runId, config, spec, emit, waitIfPaused)
 })
 

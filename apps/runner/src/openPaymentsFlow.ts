@@ -6,11 +6,47 @@ import {
 import type { RequestHandler } from 'express'
 import express from 'express'
 import type {
+  CapturedHttp,
   FlowExecutionSpec,
   RunnerEvent,
   RunId,
   StepId
 } from '@opviz/shared'
+
+// Headers that carry signing material or tokens — never sent to the browser.
+const REDACTED_HEADERS = new Set(['authorization', 'signature', 'signature-input', 'content-digest'])
+const MAX_BODY_CHARS = 8000
+
+function redactHeaders(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    out[key] = REDACTED_HEADERS.has(key.toLowerCase()) ? '«redacted»' : value
+  })
+  return out
+}
+
+// Grant responses embed real access tokens (access_token.value, possibly under `continue`). Mask any
+// access_token.value at any depth before the body leaves the runner. Falls back to the raw string if
+// it isn't JSON.
+function scrubBody(body: string | undefined): string | undefined {
+  if (!body) return body
+  const clipped = body.length > MAX_BODY_CHARS ? `${body.slice(0, MAX_BODY_CHARS)}… (truncated)` : body
+  try {
+    const parsed = JSON.parse(clipped)
+    const redact = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return
+      const obj = node as Record<string, any>
+      if (obj.access_token && typeof obj.access_token === 'object' && 'value' in obj.access_token) {
+        obj.access_token.value = '«redacted»'
+      }
+      for (const v of Object.values(obj)) redact(v)
+    }
+    redact(parsed)
+    return JSON.stringify(parsed)
+  } catch {
+    return clipped
+  }
+}
 
 export type RunnerConfig = {
   clientWalletAddressUrl: string
@@ -199,6 +235,57 @@ export async function runOpenPaymentsFlow(
   // belongs to — that's what turns the failing step red in the UI timeline/graph.
   let currentStepId: StepId | undefined
 
+  // --- HTTP capture (for the "Raw HTTP" view) -------------------------------
+  // The OP client makes its calls over globalThis.fetch. Wrap it for the duration of this run to
+  // record the redacted request/response of the most recent call, then attach that to the next
+  // result-bearing ("post-call") event. Restored in `finally` so the wrapper never leaks.
+  let lastHttp: CapturedHttp | undefined
+  const POST_CALL_EVENTS = new Set<RunnerEvent['type']>([
+    'walletAddress.resolved',
+    'grant.finalized',
+    'incomingPayment.created',
+    'quote.created',
+    'grant.continued',
+    'outgoingPayment.created'
+  ])
+  const baseEmit = emit
+  emit = (evt: RunnerEvent) => {
+    if (lastHttp && !evt.http && POST_CALL_EVENTS.has(evt.type)) {
+      evt.http = lastHttp
+      lastHttp = undefined
+    }
+    baseEmit(evt)
+  }
+
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (input: any, init?: any) => {
+    const res = await realFetch(input, init)
+    try {
+      const isRequest = typeof input === 'object' && input !== null && 'url' in input
+      const url = isRequest ? input.url : String(input)
+      const method = String(init?.method ?? (isRequest ? input.method : 'GET') ?? 'GET').toUpperCase()
+      const reqHeaders = new Headers(init?.headers ?? (isRequest ? input.headers : undefined))
+      const requestBody = typeof init?.body === 'string' ? init.body : undefined
+      let responseBody: string | undefined
+      try {
+        responseBody = await res.clone().text()
+      } catch {
+        responseBody = undefined
+      }
+      lastHttp = {
+        method,
+        url,
+        requestHeaders: redactHeaders(reqHeaders),
+        requestBody: scrubBody(requestBody),
+        status: res.status,
+        responseBody: scrubBody(responseBody)
+      }
+    } catch {
+      // Capture is best-effort; never let it break the actual request.
+    }
+    return res
+  }) as typeof fetch
+
   try {
     currentStepId = spec.steps.walletResolve
     const client = await createAuthenticatedClient({
@@ -365,7 +452,8 @@ export async function runOpenPaymentsFlow(
       resourceId: quote.id,
       // Both amounts are exact, straight from the quote — including the converted (variable) side.
       debitAmount: quote.debitAmount,
-      receiveAmount: quote.receiveAmount
+      receiveAmount: quote.receiveAmount,
+      expiresAt: quote.expiresAt
     })
 
     currentStepId = spec.steps.outgoingGrantInteractive
@@ -496,6 +584,9 @@ export async function runOpenPaymentsFlow(
     emit({ ...newEventBase(runId, 'run.completed') })
   } catch (err) {
     emit(toRunnerError(runId, currentStepId, err))
+  } finally {
+    // Always restore the real fetch so the wrapper never leaks across runs.
+    globalThis.fetch = realFetch
   }
 }
 

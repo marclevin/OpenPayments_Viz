@@ -6,6 +6,7 @@
 //
 // All functions are pure and framework-free (mirrors lib/explain.ts), so they're easy to test.
 import type { FlowDefinition, FlowStep, RunnerEvent } from '@opviz/shared'
+import { approxAmount, renderTemplate, type RunAmounts } from './amounts'
 import { getEntityColorVar, type EntityColorVar } from './colorMap'
 import { prettyJson } from './format'
 
@@ -47,14 +48,6 @@ function resourcePath(url: string): string {
   } catch {
     return url
   }
-}
-
-// Open Payments amounts are integer minor units + an assetScale (e.g. 1234 @ scale 2 = 12.34).
-function fmtAmount(a?: { value: string; assetCode: string; assetScale: number }): string {
-  if (!a) return ''
-  const n = Number(a.value)
-  if (!Number.isFinite(n)) return `${a.assetCode} ${a.value}`
-  return `${a.assetCode} ${(n / 10 ** a.assetScale).toFixed(a.assetScale)}`
 }
 
 function walletLabel(wallet: 'sending' | 'receiving' | 'client'): string {
@@ -144,19 +137,17 @@ export function humanizeEvent(e: RunnerEvent, _flow: FlowDefinition): EventNarra
     case 'quote.created': {
       // The quote fixes one side and derives the other (the converted amount, after FX + fees).
       // In the web mock the derived side is an illustrative estimate, flagged via approxSide and
-      // rendered with a leading "≈".
-      const approx = (side: 'debit' | 'receive', text: string) =>
-        e.approxSide === side ? `≈ ${text}` : text
+      // rendered with a leading "≈" (see approxAmount).
       return {
         actor: 'Client',
         actorColorVar: colorFor('Client', 'client'),
         sentence: 'Client created a Quote',
         facts: [
           ...(e.debitAmount
-            ? [{ label: 'Debit', value: approx('debit', fmtAmount(e.debitAmount)), tone: 'asset' as const }]
+            ? [{ label: 'Debit', value: approxAmount('debit', e.approxSide, e.debitAmount), tone: 'asset' as const }]
             : []),
           ...(e.receiveAmount
-            ? [{ label: 'Receive', value: approx('receive', fmtAmount(e.receiveAmount)), tone: 'asset' as const }]
+            ? [{ label: 'Receive', value: approxAmount('receive', e.approxSide, e.receiveAmount), tone: 'asset' as const }]
             : []),
           { label: 'Resource', value: resourcePath(e.resourceId), tone: 'code' as const },
         ],
@@ -260,7 +251,7 @@ export type WhyContent = {
 // Pulls the "why" entirely from the scenario definition: the step description, the per-node
 // roles, and the involved request/redirect edges' descriptions. Returns null for the Run lane
 // or an unknown step (so no info icon is shown).
-export function resolveWhy(block: EventBlock, flow: FlowDefinition): WhyContent | null {
+export function resolveWhy(block: EventBlock, flow: FlowDefinition, amounts?: RunAmounts): WhyContent | null {
   const step = block.step
   if (!step) return null
 
@@ -268,7 +259,7 @@ export function resolveWhy(block: EventBlock, flow: FlowDefinition): WhyContent 
   if (step.nodeRoles) {
     for (const [nodeId, body] of Object.entries(step.nodeRoles)) {
       const label = flow.nodes.find((n) => n.id === nodeId)?.label ?? nodeId
-      roles.push({ label, body })
+      roles.push({ label, body: renderTemplate(body, amounts) })
     }
   }
 
@@ -278,7 +269,7 @@ export function resolveWhy(block: EventBlock, flow: FlowDefinition): WhyContent 
     // Only network hops carry a meaningful "why"; structural relation/creation edges don't.
     if (!edge || !edge.description) continue
     if (edge.kind !== 'request' && edge.kind !== 'redirect') continue
-    edges.push({ label: edge.label ?? edge.kind, body: edge.description })
+    edges.push({ label: edge.label ?? edge.kind, body: renderTemplate(edge.description, amounts) })
   }
 
   return { title: step.title, what: step.description, roles, edges }
@@ -294,7 +285,8 @@ export type JsonLine = {
 }
 
 // The RunnerEventBase plumbing — useful for debugging, noise for learning. Hidden by default.
-const BOILERPLATE = new Set(['id', 'runId', 'ts', 'level', 'type'])
+// `http` is hidden here too: it's rendered separately as a dedicated Raw HTTP block in the EventLog.
+const BOILERPLATE = new Set(['id', 'runId', 'ts', 'level', 'type', 'http'])
 
 // Builds the curated JSON as structured lines so highlighting is a per-key boolean rather than
 // a brittle regex over a stringified blob. Nested objects/arrays are pretty-printed in place.

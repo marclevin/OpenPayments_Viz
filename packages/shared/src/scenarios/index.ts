@@ -1,4 +1,5 @@
 import type { FlowDefinition, FlowExecutionSpec } from '../types.js'
+import { failureScenarios } from './failureScenarios.js'
 import { p2pExampleFlow } from './p2pExampleFlow.js'
 import { splitPaymentFlow, splitPaymentSpec } from './splitPaymentFlow.js'
 import { subscriptionFixedFlow, subscriptionFixedSpec } from './subscriptionFixedFlow.js'
@@ -6,11 +7,18 @@ import { subscriptionFixedFlow, subscriptionFixedSpec } from './subscriptionFixe
 export * from './p2pExampleFlow.js'
 export * from './splitPaymentFlow.js'
 export * from './subscriptionFixedFlow.js'
+export * from './failureScenarios.js'
 
 // Registry of all selectable scenarios. Adding a new teaching scenario is purely
 // data: author a FlowDefinition (with node/edge/step descriptions and per-step
-// nodeRoles) and append it here — no app logic changes required.
-export const scenarios: FlowDefinition[] = [p2pExampleFlow, subscriptionFixedFlow, splitPaymentFlow]
+// nodeRoles) and append it here — no app logic changes required. The failure scenarios
+// reuse the P2P graph and inject a mock failure at a chosen step.
+export const scenarios: FlowDefinition[] = [
+  p2pExampleFlow,
+  subscriptionFixedFlow,
+  splitPaymentFlow,
+  ...failureScenarios.map((f) => f.flow),
+]
 
 export const defaultScenarioId = p2pExampleFlow.id
 
@@ -44,6 +52,7 @@ const executionSpecs: Record<string, FlowExecutionSpec> = {
   [openPaymentsExampleSpec.scenarioId]: openPaymentsExampleSpec,
   [subscriptionFixedSpec.scenarioId]: subscriptionFixedSpec,
   [splitPaymentSpec.scenarioId]: splitPaymentSpec,
+  ...Object.fromEntries(failureScenarios.map((f) => [f.spec.scenarioId, f.spec])),
 }
 
 export function getExecutionSpec(scenarioId: string | undefined): FlowExecutionSpec {

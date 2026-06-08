@@ -1,4 +1,5 @@
-import type { FlowExecutionSpec, RunnerEvent } from '@opviz/shared'
+import type { CapturedHttp, FlowExecutionSpec, RunnerEvent } from '@opviz/shared'
+import { amountsFromSpec } from './amounts'
 
 function nowIso() {
   return new Date().toISOString()
@@ -8,51 +9,43 @@ const RUN_ID = 'mock'
 const AUTH = 'https://auth.interledger-test.dev'
 const RESOURCE = 'https://ilp.interledger-test.dev'
 
-// Fully-typed mock trace driven by a scenario's execution spec, with realistic live data so
-// the timeline/graph animate identically to a real run. Uses the spec's step ids and amount,
-// so any scenario sharing the canonical Open Payments sequence works without bespoke mock code.
-// Derives the two wallet currencies and the quote's debit/receive amounts for a mock run. Since
-// the mock has no real quote, the variable (converted) side is an illustrative FX estimate built
-// from spec.display; `approxSide` marks it so the timeline can render it with a "≈".
-function mockAmounts(spec: FlowExecutionSpec) {
-  const fixedSend = spec.amountMode === 'fixed-send'
-  const fixed = (fixedSend ? spec.debitAmount : spec.incomingAmount)!
-
-  // Without display hints both sides share the fixed currency and nothing is approximate.
-  const cpAsset = spec.display?.counterpartyAsset ?? { assetCode: fixed.assetCode, assetScale: fixed.assetScale }
-  const fxRate = spec.display?.fxRate ?? 1
-  const fixedMajor = Number(fixed.value) / 10 ** fixed.assetScale
-  const counterparty = {
-    assetCode: cpAsset.assetCode,
-    assetScale: cpAsset.assetScale,
-    value: Math.round(fixedMajor * fxRate * 10 ** cpAsset.assetScale).toString(),
+// Synthesizes a representative request/response for the "Raw HTTP" view in Mocked mode. Authenticated
+// calls show the same «redacted» placeholders a real run would, to teach the redaction concept. GET
+// wallet lookups are unauthenticated, so they carry no auth/signature headers.
+function mockHttp(opts: {
+  method: string
+  path: string
+  authed?: boolean
+  requestBody?: unknown
+  responseBody?: unknown
+}): CapturedHttp {
+  const requestHeaders: Record<string, string> = { accept: 'application/json' }
+  if (opts.requestBody !== undefined) requestHeaders['content-type'] = 'application/json'
+  if (opts.authed) {
+    requestHeaders.authorization = 'GNAP «redacted»'
+    requestHeaders.signature = '«redacted»'
+    requestHeaders['signature-input'] = '«redacted»'
   }
-
-  // For fixed-send the sender's debit is the fixed side and the receiver's amount is derived;
-  // for fixed-receive it's the reverse.
-  const debitAmount = fixedSend ? fixed : counterparty
-  const receiveAmount = fixedSend ? counterparty : fixed
-  const approxSide: 'debit' | 'receive' | undefined = spec.display
-    ? fixedSend
-      ? 'receive'
-      : 'debit'
-    : undefined
-
   return {
-    senderAsset: debitAmount,
-    receiverAsset: receiveAmount,
-    debitAmount,
-    receiveAmount,
-    approxSide,
+    method: opts.method,
+    url: `${RESOURCE}${opts.path}`,
+    requestHeaders,
+    requestBody: opts.requestBody !== undefined ? JSON.stringify(opts.requestBody, null, 2) : undefined,
+    status: opts.method === 'POST' ? 201 : 200,
+    responseBody: opts.responseBody !== undefined ? JSON.stringify(opts.responseBody, null, 2) : undefined,
   }
 }
 
+// Fully-typed mock trace driven by a scenario's execution spec, with realistic live data so
+// the timeline/graph animate identically to a real run. Uses the spec's step ids and amount,
+// so any scenario sharing the canonical Open Payments sequence works without bespoke mock code.
+// Currencies/amounts come from the shared resolver (amountsFromSpec), the single source of truth.
 export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): RunnerEvent[] {
   if (spec.recipients?.length) return makeSplitRunEvents(spec, consentUrl)
 
   const { steps } = spec
-  const { senderAsset, receiverAsset, debitAmount, receiveAmount, approxSide } = mockAmounts(spec)
-  return [
+  const { senderAsset, receiverAsset, debitAmount, receiveAmount, approxSide } = amountsFromSpec(spec)
+  const runEvents: RunnerEvent[] = [
     { id: 'e1', runId: RUN_ID, ts: nowIso(), type: 'run.started', level: 'info' },
     {
       id: 'e2a',
@@ -111,6 +104,23 @@ export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): 
       stepId: steps.incomingPayment,
       level: 'info',
       resourceId: `${RESOURCE}/incoming-payments/ip_123`,
+      http: mockHttp({
+        method: 'POST',
+        path: '/incoming-payments',
+        authed: true,
+        requestBody: {
+          walletAddress: `${RESOURCE}/receiving-wallet`,
+          // Fixed-send leaves the incoming payment open-ended (no incomingAmount).
+          ...(spec.amountMode === 'fixed-send' ? {} : { incomingAmount: receiveAmount }),
+          metadata: { description: 'From OpenPayments flow visualizer runner' },
+        },
+        responseBody: {
+          id: `${RESOURCE}/incoming-payments/ip_123`,
+          walletAddress: `${RESOURCE}/receiving-wallet`,
+          ...(spec.amountMode === 'fixed-send' ? {} : { incomingAmount: receiveAmount }),
+          completed: false,
+        },
+      }),
     },
     {
       id: 'e5',
@@ -142,6 +152,21 @@ export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): 
       debitAmount,
       receiveAmount,
       approxSide,
+      // A real quote's debitAmount has a short validity window; fabricate a plausible one (+5 min).
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      http: mockHttp({
+        method: 'POST',
+        path: '/quotes',
+        authed: true,
+        requestBody: {
+          walletAddress: `${RESOURCE}/sending-wallet`,
+          receiver: `${RESOURCE}/incoming-payments/ip_123`,
+          method: 'ilp',
+          // Fixed-send pins the debit on the quote; fixed-receive derives it from the incoming payment.
+          ...(spec.amountMode === 'fixed-send' ? { debitAmount } : {}),
+        },
+        responseBody: { id: `${RESOURCE}/quotes/q_123`, debitAmount, receiveAmount },
+      }),
     },
     {
       id: 'e7',
@@ -155,12 +180,35 @@ export function makeMockRunEvents(spec: FlowExecutionSpec, consentUrl: string): 
       callbackUrl: 'http://localhost:3999/callback',
     },
   ]
+  return applyMockFailure(runEvents, spec)
+}
+
+// Teaching failure scenarios: stop the trace at spec.mockFailure.atStep and replace that step's
+// success with a runner.error. If atStep belongs to the post-consent completion phase, this leaves
+// the run events untouched (findIndex returns -1) and the error is injected during completion.
+function applyMockFailure(events: RunnerEvent[], spec: FlowExecutionSpec): RunnerEvent[] {
+  const fail = spec.mockFailure
+  if (!fail) return events
+  const idx = events.findIndex((e) => e.stepId === fail.atStep)
+  if (idx === -1) return events
+  const prefix = events.slice(0, idx)
+  prefix.push({
+    id: 'mock-error',
+    runId: RUN_ID,
+    ts: nowIso(),
+    type: 'runner.error',
+    stepId: fail.atStep,
+    level: 'error',
+    message: fail.message,
+  })
+  return prefix
 }
 
 export function makeMockConsentCompletionEvents(spec: FlowExecutionSpec): RunnerEvent[] {
   if (spec.recipients?.length) return makeSplitConsentCompletionEvents(spec)
 
   const { steps } = spec
+  const { debitAmount, receiveAmount } = amountsFromSpec(spec)
   const events: RunnerEvent[] = [
     {
       id: 'e8',
@@ -179,6 +227,22 @@ export function makeMockConsentCompletionEvents(spec: FlowExecutionSpec): Runner
       stepId: steps.outgoingPayment,
       level: 'info',
       resourceId: `${RESOURCE}/outgoing-payments/op_123`,
+      http: mockHttp({
+        method: 'POST',
+        path: '/outgoing-payments',
+        authed: true,
+        requestBody: {
+          walletAddress: `${RESOURCE}/sending-wallet`,
+          quoteId: `${RESOURCE}/quotes/q_123`,
+          metadata: { description: 'Sent from OpenPayments flow visualizer runner' },
+        },
+        responseBody: {
+          id: `${RESOURCE}/outgoing-payments/op_123`,
+          debitAmount,
+          receiveAmount,
+          failed: false,
+        },
+      }),
     },
   ]
   // Recurring scenarios: light up the informational explainer step at the end.
@@ -194,7 +258,7 @@ export function makeMockConsentCompletionEvents(spec: FlowExecutionSpec): Runner
     })
   }
   events.push({ id: 'e10', runId: RUN_ID, ts: nowIso(), type: 'run.completed', level: 'info' })
-  return events
+  return applyMockFailure(events, spec)
 }
 
 // Split-payment trace: one customer payment fans out to multiple recipients. Each recipient gets

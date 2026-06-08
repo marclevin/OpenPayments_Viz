@@ -3,7 +3,7 @@ import type { FlowDefinition } from '../types.js'
 export const p2pExampleFlow: FlowDefinition = {
   id: 'p2p-example',
   title: 'One Time P2P Payment',
-  description: 'A simple one-time peer-to-peer payment flow with a fixed SEND amount. The Sender Wallet is debited exactly $10.00 USD; the Receiver Wallet (a EUR account) gets whatever that converts to (≈€8.58), so the sender covers the currency conversion. The incoming-payment is left open-ended and the quote pins the sender’s debit.',
+  description: 'A simple one-time peer-to-peer payment flow. The Sender Wallet is debited exactly {debit}; the Receiver Wallet (a {receiverAsset} account) gets whatever that converts to ({receive}), so the sender covers the currency conversion. The incoming-payment is left open-ended and the quote pins the sender’s debit.',
   nodes: [
     {
       id: 'client',
@@ -11,7 +11,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Client',
       position: { x: 0, y: 230 },
       description:
-        'The Client is the program driving the payment (here, the runner). It holds a private key and signs every request so servers can verify who is calling. It talks to wallet addresses, the Auth Server, and the Resource Server to arrange a payment on the sender’s behalf. Open Payments is an instruction layer: the Client never moves money itself, it asks the account-servicing entities to.',
+        'The Client is the program driving the payment (here, the runner). It holds a private key and signs every request so servers can verify who is calling. It talks to wallet addresses, the Auth Server, and the Resource Server to arrange a payment on the sender’s behalf. Open Payments is an instruction layer: the Client never moves money itself — it asks the account-servicing entities (the banks that actually hold the accounts and move the funds) to.',
     },
     {
       id: 'senderWallet',
@@ -59,7 +59,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Quote',
       position: { x: 860, y: 110 },
       description:
-        'A quote is a firm price for the transfer, created on the sender’s Resource Server. Here the quote is given a fixed debitAmount ($10.00 USD), so it locks the sender’s cost and works out the resulting receiveAmount the receiver gets after fees and currency conversion (≈€8.58).',
+        'A quote is a firm price for the transfer, created on the sender’s Resource Server. Here the quote is given a fixed debitAmount ({debit}), so it locks the sender’s cost and works out the resulting receiveAmount the receiver gets after fees and currency conversion ({receive}). A quote is only valid for a short window before it expires.',
     },
     {
       id: 'outgoingPayment',
@@ -67,7 +67,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Outgoing Payment',
       position: { x: 860, y: 0 },
       description:
-        'An outgoing-payment is an instruction to the sender’s account-servicing entity (the Resource Server) to make a payment — creating it does not move money by itself. It references the quote for the price and the incoming-payment as the destination, and it can only be created after the sender has consented. The account-servicing entity then settles the actual transfer out of band.',
+        'An outgoing-payment is an instruction to the sender’s account-servicing entity (the bank behind the Resource Server) to make a payment — creating it does not move money by itself. It references the quote for the price and the incoming-payment as the destination, and it can only be created after the sender has consented. The account-servicing entity then settles the actual transfer out of band.',
     },
   ],
   edges: [
@@ -129,7 +129,7 @@ export const p2pExampleFlow: FlowDefinition = {
       label: 'Create Quote',
       stepId: 'step-quote',
       description:
-        'With the quote grant’s token, the Client asks the sender’s Resource Server to create a quote with a fixed $10.00 debitAmount — a firm price that pins the sender’s cost and derives what the incoming-payment receives.',
+        'With the quote grant’s token, the Client asks the sender’s Resource Server to create a quote with a fixed {debit} debitAmount — a firm price that pins the sender’s cost and derives what the incoming-payment receives.',
     },
     {
       id: 'e-grant-out',
@@ -276,14 +276,14 @@ export const p2pExampleFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'resource', 'quote'],
       involvedEdgeIds: ['e-quote', 'e-create-q'],
       description:
-        'The Client creates the quote on the sender’s Resource Server with a fixed $10.00 debitAmount. The quote pins what the sender pays and derives what the receiver gets (≈€8.58 after conversion).',
+        'The Client creates the quote on the sender’s Resource Server with a fixed {debit} debitAmount. The quote pins what the sender pays and derives what the receiver gets ({receive} after conversion).',
       nodeRoles: {
         client:
-          'The Client uses the quote token to ask the sender’s Resource Server for a firm price, naming the fixed $10.00 it wants to debit.',
+          'The Client uses the quote token to ask the sender’s Resource Server for a firm price, naming the fixed {debit} it wants to debit.',
         resource:
           'The sender’s Resource Server works out the resulting receive amount (including any fees or conversion) and returns the quote.',
         quote:
-          'The quote is created here, locking the sender’s $10.00 debit and the EUR amount the receiver will get.',
+          'The quote is created here, locking the sender’s {debit} debit and the {receiverAsset} amount the receiver will get.',
       },
     },
     {

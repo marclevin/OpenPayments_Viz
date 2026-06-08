@@ -1,6 +1,7 @@
-import { getStepStatusFromEvents, type FlowDefinition, type RunnerEvent, type StepStatus } from '@opviz/shared'
+import { getStepStatusFromEvents, type CapturedHttp, type FlowDefinition, type RunnerEvent, type StepStatus } from '@opviz/shared'
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import type { RunAmounts } from '../lib/amounts'
 import { highlightEntities } from '../lib/colorMap'
 import {
   groupEventsIntoBlocks,
@@ -19,6 +20,8 @@ type EventLogProps = {
   // Optional: clicking a block header drives the shared timeline/graph selection.
   onSelectStep?: (stepId: string) => void
   selectedStepId?: string | null
+  // Live run amounts, used to fill {tokens} in the per-step "why" prose.
+  amounts?: RunAmounts
 }
 
 // Keep enough blocks to comfortably cover any scenario; guards against an unbounded live run.
@@ -152,7 +155,39 @@ function CuratedJson({ event, keyField }: { event: RunnerEvent; keyField?: strin
   )
 }
 
-export function EventLog({ events, flow, onSelectStep, selectedStepId }: EventLogProps) {
+// The real (TestNet) or synthesized (mock) HTTP behind an event, with secrets already redacted by
+// the runner/mock. Gives students the literal request/response without leaving the timeline.
+function HttpDetail({ http }: { http: CapturedHttp }) {
+  const headers = http.requestHeaders ? Object.entries(http.requestHeaders) : []
+  return (
+    <div className="httpDetail">
+      <div className="httpLine">
+        <span className="httpMethod">{http.method}</span> <span className="httpUrl">{http.url}</span>
+        {typeof http.status === 'number' ? <span className="httpStatus"> → {http.status}</span> : null}
+      </div>
+      {headers.length ? (
+        <div className="httpSection">
+          <div className="httpSectionTitle">Request headers</div>
+          <pre className="rawJson">{headers.map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>
+        </div>
+      ) : null}
+      {http.requestBody ? (
+        <div className="httpSection">
+          <div className="httpSectionTitle">Request body</div>
+          <pre className="rawJson">{http.requestBody}</pre>
+        </div>
+      ) : null}
+      {http.responseBody ? (
+        <div className="httpSection">
+          <div className="httpSectionTitle">Response body</div>
+          <pre className="rawJson">{http.responseBody}</pre>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function EventLog({ events, flow, onSelectStep, selectedStepId, amounts }: EventLogProps) {
   const [rawMode, setRawMode] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [openWhy, setOpenWhy] = useState<{ key: string; anchor: DOMRect } | null>(null)
@@ -212,7 +247,7 @@ export function EventLog({ events, flow, onSelectStep, selectedStepId }: EventLo
       {orderedBlocks.map((block) => {
         const key = blockKey(block)
         const status = block.stepId ? getStepStatusFromEvents(block.stepId, events) : undefined
-        const why = resolveWhy(block, flow)
+        const why = resolveWhy(block, flow, amounts)
         const clickable = Boolean(block.stepId && onSelectStep)
         const showGroupLabel = block.group && block.group !== prevGroup
         prevGroup = block.group
@@ -292,6 +327,7 @@ export function EventLog({ events, flow, onSelectStep, selectedStepId }: EventLo
                           ) : (
                             <CuratedJson event={e} keyField={n.keyField} />
                           )}
+                          {!rawMode && e.http ? <HttpDetail http={e.http} /> : null}
                         </div>
                       )}
                     </li>

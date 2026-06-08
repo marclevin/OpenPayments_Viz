@@ -8,13 +8,17 @@ import { FlowNode } from './components/FlowNode'
 import { IntroDialog } from './components/IntroDialog'
 import { LegendOverlay } from './components/LegendOverlay'
 import { ParallelEdge } from './components/ParallelEdge'
+import { ParameterEditor } from './components/ParameterEditor'
+import { QuoteBreakdown } from './components/QuoteBreakdown'
+import { amountsFromSpec, renderTemplate, resolveRunAmounts, type RunAmounts } from './lib/amounts'
 import { getEntityColorVar, highlightEntities } from './lib/colorMap'
-import { createRunnerClient, type RunnerConfig } from './lib/eventStream'
+import { createRunnerClient, type ResolvedWallet, type RunnerConfig } from './lib/eventStream'
+import { applyParams, deriveParams, toSpecOverrides, type ScenarioParams } from './lib/scenarioParams'
 import { type ExplainSegment, explainEdge, explainNode, explainStep, nodeStatus } from './lib/explain'
 import { makeMockConsentCompletionEvents, makeMockRunEvents } from './lib/mockRun'
 
 type TransportMode = 'mock' | 'sse'
-type BottomTab = 'inspector' | 'description' | 'setup'
+type BottomTab = 'inspector' | 'description' | 'params' | 'setup'
 type Selection = { kind: 'node' | 'edge' | 'step'; id: string } | null
 
 const nodeTypes = { flowNode: FlowNode }
@@ -86,7 +90,15 @@ function NarrationParagraph({ text }: { text: string }) {
 // A plain-language overview of the selected scenario: the title, its one-line summary, and a
 // grouped walkthrough built from each step's own prose. All text runs through NarrationParagraph
 // so entity names (Client, Auth Server, Quote…) keep their colour coding.
-function ScenarioDescription({ flow }: { flow: FlowDefinition }) {
+function ScenarioDescription({
+  flow,
+  amounts,
+  failure,
+}: {
+  flow: FlowDefinition
+  amounts?: RunAmounts
+  failure?: { atStep: string; message: string }
+}) {
   // Collapse consecutive steps that share a `group` label into one section.
   const groups = useMemo(() => {
     const out: Array<{ label?: string; steps: FlowStep[] }> = []
@@ -98,12 +110,17 @@ function ScenarioDescription({ flow }: { flow: FlowDefinition }) {
     return out
   }, [flow])
 
+  // For failure scenarios, the steps reuse the happy-path prose. Mark the step that fails and the
+  // steps after it ("not reached") so the walkthrough doesn't read as a fully successful payment.
+  const failIdx = failure ? flow.steps.findIndex((s) => s.id === failure.atStep) : -1
+  const notReached = new Set(failIdx >= 0 ? flow.steps.slice(failIdx + 1).map((s) => s.id) : [])
+
   return (
     <div className="scenarioDesc">
       <h3 className="scenarioDescTitle">{flow.title}</h3>
       {flow.description && (
         <div className="scenarioDescLede">
-          <NarrationParagraph text={flow.description} />
+          <NarrationParagraph text={renderTemplate(flow.description, amounts)} />
         </div>
       )}
       <div className="scenarioWalkthrough">
@@ -111,12 +128,27 @@ function ScenarioDescription({ flow }: { flow: FlowDefinition }) {
           <section key={gi} className="scenarioGroup">
             {g.label && <div className="scenarioGroupLabel">{g.label}</div>}
             <ol className="scenarioSteps">
-              {g.steps.map((s) => (
-                <li key={s.id} className="scenarioStep">
-                  <div className="scenarioStepTitle">{s.title}</div>
-                  {s.description && <NarrationParagraph text={s.description} />}
-                </li>
-              ))}
+              {g.steps.map((s) => {
+                const isFail = s.id === failure?.atStep
+                const isSkipped = notReached.has(s.id)
+                return (
+                  <li
+                    key={s.id}
+                    className={`scenarioStep${isFail ? ' stepFails' : ''}${isSkipped ? ' stepSkipped' : ''}`}
+                  >
+                    <div className="scenarioStepTitle">
+                      {s.title}
+                      {isFail ? <span className="stepFailTag"> ✗ fails here</span> : null}
+                      {isSkipped ? <span className="stepSkipTag"> · not reached</span> : null}
+                    </div>
+                    {isFail && failure ? (
+                      <p className="stepFailMsg">{failure.message}</p>
+                    ) : s.description ? (
+                      <NarrationParagraph text={renderTemplate(s.description, amounts)} />
+                    ) : null}
+                  </li>
+                )
+              })}
             </ol>
           </section>
         ))}
@@ -162,6 +194,59 @@ function AddressPreview({ value }: { value: string }) {
   )
 }
 
+type BadgeState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ok'; data: ResolvedWallet }
+  | { status: 'error'; error: string; offline: boolean }
+
+// Live wallet-address validation: debounced lookup via the runner's /resolve endpoint. Surfaces the
+// wallet's real currency. Degrades gracefully when the runner isn't running (pure mock setups).
+function WalletBadge({ value, baseUrl }: { value: string; baseUrl: string }) {
+  const [state, setState] = useState<BadgeState>({ status: 'idle' })
+
+  useEffect(() => {
+    const url = normalizeWalletAddressInput(value)
+    if (!url) {
+      setState({ status: 'idle' })
+      return
+    }
+    let cancelled = false
+    setState({ status: 'loading' })
+    const t = window.setTimeout(async () => {
+      try {
+        const data = await createRunnerClient(baseUrl).resolveWallet(url)
+        if (!cancelled) setState({ status: 'ok', data })
+      } catch (e) {
+        const msg = (e as Error).message || "couldn't resolve"
+        // A thrown TypeError ("Failed to fetch") means the runner is unreachable, not a bad address.
+        const offline = /failed to fetch|networkerror|load failed/i.test(msg)
+        if (!cancelled) setState({ status: 'error', error: msg, offline })
+      }
+    }, 500)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [value, baseUrl])
+
+  if (state.status === 'idle') return null
+  if (state.status === 'loading') return <div className="walletBadge loading">Resolving…</div>
+  if (state.status === 'error') {
+    return (
+      <div className="walletBadge err">
+        {state.offline ? 'Live validation needs the runner running.' : `✗ ${state.error}`}
+      </div>
+    )
+  }
+  const { assetCode, assetScale } = state.data
+  return (
+    <div className="walletBadge ok">
+      ✓ {assetCode} wallet (scale {assetScale})
+    </div>
+  )
+}
+
 type Focus =
   | { kind: 'step'; step: FlowStep }
   | { kind: 'node'; node: FlowNodeT }
@@ -201,6 +286,20 @@ function AppInner() {
   // The selected scenario drives both the visual graph and the runner config.
   const [scenarioId, setScenarioId] = useState<string>(defaultScenarioId)
   const flow = useMemo(() => getScenarioById(scenarioId) ?? scenarios[0]!, [scenarioId])
+  // Student-editable parameters for the current scenario; null until derived from its spec. Reset
+  // whenever the scenario changes (see effect below).
+  const [params, setParams] = useState<ScenarioParams | null>(null)
+  useEffect(() => {
+    setParams(deriveParams(getExecutionSpec(scenarioId)))
+  }, [scenarioId])
+  // The spec actually executed: base scenario spec with the student's parameter edits applied.
+  const effectiveSpec = useMemo(() => {
+    const base = getExecutionSpec(scenarioId)
+    return params ? applyParams(base, params) : base
+  }, [scenarioId, params])
+  // The currencies/amounts this scenario's prose assumes, used to warn when a configured wallet's
+  // real currency differs and as the stable example in the Scenario Description tab.
+  const specAmounts = useMemo(() => amountsFromSpec(effectiveSpec), [effectiveSpec])
   // Some scenarios are illustrative and can't run against the live TestNet (e.g. split payments,
   // which the single-sequence runner can't orchestrate). For those we lock the transport to mock.
   const mockOnly = Boolean(flow.mockOnly)
@@ -306,19 +405,26 @@ function AppInner() {
     return edge ? { kind: 'edge', edge } : null
   }, [selection, flow.nodes, flow.edges, flow.steps])
 
+  // Live amounts/currencies for the current run, used to fill {tokens} in scenario prose. For a
+  // live (sse) run these come from the event stream; for mock, from the spec + display FX hint.
+  const runAmounts = useMemo(
+    () => resolveRunAmounts({ transport, spec: effectiveSpec, events }),
+    [transport, effectiveSpec, events]
+  )
+
   const narration = useMemo<ExplainSegment[]>(() => {
     if (!focus) return [{ label: '', body: 'Select a component, an arrow, or a timeline step to see what it does.' }]
     if (focus.kind === 'node') {
       // A component is explained relative to the step currently selected in the timeline.
       const timelineStep = flow.steps.find((s) => s.id === selectedStepId)
-      return explainNode(focus.node, timelineStep, nodeStatus(focus.node.id, statusesByStepId, flow))
+      return explainNode(focus.node, timelineStep, nodeStatus(focus.node.id, statusesByStepId, flow), runAmounts)
     }
     if (focus.kind === 'edge') {
       const st = focus.edge.stepId ? statusesByStepId[focus.edge.stepId] : undefined
-      return explainEdge(focus.edge, st)
+      return explainEdge(focus.edge, st, runAmounts)
     }
-    return explainStep(focus.step, statusesByStepId[focus.step.id], consentState.needsConsent)
-  }, [focus, selectedStepId, statusesByStepId, consentState.needsConsent, flow])
+    return explainStep(focus.step, statusesByStepId[focus.step.id], consentState.needsConsent, runAmounts)
+  }, [focus, selectedStepId, statusesByStepId, consentState.needsConsent, flow, runAmounts])
 
   // Header title + type badge + accent color for the narration panel, derived from `focus`.
   const focusHeader = useMemo(() => {
@@ -746,7 +852,7 @@ function AppInner() {
 
     if (transport === 'mock') {
       setIsRunning(true)
-      playbackRef.current = { queue: makeMockRunEvents(getExecutionSpec(scenarioId), 'https://example.com/consent'), i: 0 }
+      playbackRef.current = { queue: makeMockRunEvents(effectiveSpec, 'https://example.com/consent'), i: 0 }
       pumpPlayback()
       return
     }
@@ -788,6 +894,8 @@ function AppInner() {
       callbackPort,
       scenarioId,
       uiBaseUrl,
+      // Parameter-editor edits; the runner merges these onto the registered spec.
+      specOverrides: toSpecOverrides(effectiveSpec),
     }
     setIsRunning(true)
     try {
@@ -814,7 +922,7 @@ function AppInner() {
       // Mock mode has no real auth server to visit — don't open an external tab. Just simulate
       // the user approving and the runner continuing the grant.
       clearTimer()
-      playbackRef.current = { queue: makeMockConsentCompletionEvents(getExecutionSpec(scenarioId)), i: 0 }
+      playbackRef.current = { queue: makeMockConsentCompletionEvents(effectiveSpec), i: 0 }
       pumpPlayback()
       return
     }
@@ -1090,6 +1198,9 @@ function AppInner() {
                   <button className={`tab ${bottomTab === 'description' ? 'active' : ''}`} onClick={() => setBottomTab('description')}>
                     Scenario Description
                   </button>
+                  <button className={`tab ${bottomTab === 'params' ? 'active' : ''}`} onClick={() => setBottomTab('params')}>
+                    Parameters
+                  </button>
                   <button className={`tab ${bottomTab === 'setup' ? 'active' : ''}`} onClick={() => setBottomTab('setup')}>
                     Configuration
                   </button>
@@ -1126,9 +1237,23 @@ function AppInner() {
                   flow={flow}
                   onSelectStep={selectStep}
                   selectedStepId={selectedStepId}
+                  amounts={runAmounts}
                 />
               ) : bottomTab === 'description' ? (
-                <ScenarioDescription flow={flow} />
+                <ScenarioDescription flow={flow} amounts={specAmounts} failure={effectiveSpec.mockFailure} />
+              ) : bottomTab === 'params' ? (
+                <div className="configForm">
+                  {params ? (
+                    <ParameterEditor
+                      spec={getExecutionSpec(scenarioId)}
+                      params={params}
+                      onChange={setParams}
+                      onReset={() => setParams(deriveParams(getExecutionSpec(scenarioId)))}
+                      transport={transport}
+                      disabled={isRunning}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <div className="configForm">
                   <CollapsibleCard
@@ -1236,26 +1361,24 @@ function AppInner() {
                     open={openSections.addresses}
                     onToggle={() => setOpenSections((s) => ({ ...s, addresses: !s.addresses }))}
                   >
-                    <p className="hint">
-                      The explanations and amounts in this tool assume a <strong>USD sending wallet</strong> and
-                      a <strong>EUR receiving wallet</strong>. You can use any currencies, but if they differ from
-                      this the help text and example figures (e.g. “≈€8.58”) won’t match your run.
-                    </p>
                     <div className="grid2">
                       <div className="field">
                         <label>Client wallet address</label>
                         <input value={clientWalletAddressUrl} onChange={(e) => setClientWalletAddressUrl(e.target.value)} placeholder="$ilp.interledger-test.dev/usdtest" />
                         <AddressPreview value={clientWalletAddressUrl} />
+                        <WalletBadge value={clientWalletAddressUrl} baseUrl={baseUrl} />
                       </div>
                       <div className="field">
                         <label>Sending wallet address</label>
                         <input value={sendingWalletAddressUrl} onChange={(e) => setSendingWalletAddressUrl(e.target.value)} placeholder="$ilp.interledger-test.dev/usdtest" />
                         <AddressPreview value={sendingWalletAddressUrl} />
+                        <WalletBadge value={sendingWalletAddressUrl} baseUrl={baseUrl} />
                       </div>
                       <div className="field" style={{ gridColumn: '1 / -1' }}>
                         <label>Receiving wallet address</label>
                         <input value={receivingWalletAddressUrl} onChange={(e) => setReceivingWalletAddressUrl(e.target.value)} placeholder="$ilp.interledger-test.dev/a23bbe02" />
                         <AddressPreview value={receivingWalletAddressUrl} />
+                        <WalletBadge value={receivingWalletAddressUrl} baseUrl={baseUrl} />
                       </div>
                     </div>
                   </CollapsibleCard>
@@ -1297,6 +1420,7 @@ function AppInner() {
                   </span>
                 ) : null}
               </div>
+              <QuoteBreakdown amounts={runAmounts} />
               <div className="narrBody">
                 {narration.map((seg, i) => (
                   <div className="narrSection" key={i}>

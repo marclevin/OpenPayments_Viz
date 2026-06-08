@@ -1,4 +1,5 @@
 import type { FlowDefinition, FlowEdge, FlowNode, FlowStep, StepStatus } from '@opviz/shared'
+import { renderTemplate, type RunAmounts } from './amounts'
 
 // A labeled block of explanation. The panel renders `label` as a small section header
 // and `body` as color-coded prose.
@@ -34,15 +35,16 @@ function nodeStatusSentence(label: string, status: StepStatus): string {
 export function explainNode(
   node: FlowNode,
   step: FlowStep | undefined,
-  status: StepStatus
+  status: StepStatus,
+  amounts?: RunAmounts
 ): ExplainSegment[] {
   const out: ExplainSegment[] = []
-  if (node.description) out.push({ label: 'What it is', body: node.description })
+  if (node.description) out.push({ label: 'What it is', body: renderTemplate(node.description, amounts) })
 
   if (step) {
     if (step.involvedNodeIds.includes(node.id)) {
       const role = step.nodeRoles?.[node.id] ?? `The ${node.label} takes part in this step.`
-      out.push({ label: `At this step · ${step.title}`, body: role })
+      out.push({ label: `At this step · ${step.title}`, body: renderTemplate(role, amounts) })
     } else {
       out.push({
         label: `At this step · ${step.title}`,
@@ -68,9 +70,13 @@ function edgeStatusSentence(status: StepStatus | undefined): string {
   }
 }
 
-export function explainEdge(edge: FlowEdge, edgeStatus: StepStatus | undefined): ExplainSegment[] {
+export function explainEdge(
+  edge: FlowEdge,
+  edgeStatus: StepStatus | undefined,
+  amounts?: RunAmounts
+): ExplainSegment[] {
   const out: ExplainSegment[] = []
-  if (edge.description) out.push({ label: 'What it is', body: edge.description })
+  if (edge.description) out.push({ label: 'What it is', body: renderTemplate(edge.description, amounts) })
   if (edge.kind === 'creation') {
     out.push({
       label: 'Creation',
@@ -103,10 +109,11 @@ function stepStatusSentence(status: StepStatus | undefined): string {
 export function explainStep(
   step: FlowStep,
   status: StepStatus | undefined,
-  consentNeeded: boolean
+  consentNeeded: boolean,
+  amounts?: RunAmounts
 ): ExplainSegment[] {
   const out: ExplainSegment[] = []
-  if (step.description) out.push({ label: 'What happens', body: step.description })
+  if (step.description) out.push({ label: 'What happens', body: renderTemplate(step.description, amounts) })
   if (step.kind === 'grant.interactive_required' && consentNeeded) {
     out.push({
       label: 'Consent',

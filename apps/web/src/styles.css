@@ -821,6 +821,220 @@ a {
   background: rgba(31, 157, 85, 0.12);
 }
 
+/* Live wallet-address validation badge shown beneath each address input. */
+.walletBadge {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(11, 18, 32, 0.85);
+}
+.walletBadge.loading {
+  color: rgba(11, 18, 32, 0.55);
+  font-style: italic;
+}
+.walletBadge.ok {
+  color: rgba(20, 110, 60, 0.95);
+}
+.walletBadge.err {
+  color: rgba(150, 70, 20, 0.95);
+}
+
+/* Collapsible quote summary in the flow-narration panel: debit, receive, implied FX rate, expiry. */
+.quoteBreakdown {
+  margin: 10px 0 4px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(31, 157, 85, 0.4);
+  background: rgba(31, 157, 85, 0.08);
+  font-size: 12px;
+}
+.quoteBreakdownHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.quoteBreakdownChevron {
+  opacity: 0.6;
+  font-size: 10px;
+}
+.quoteBreakdownTitle {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.quoteBreakdownSummary {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.quoteBreakdownBody {
+  margin-top: 6px;
+}
+.quoteBreakdownRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+.quoteBreakdownRow strong {
+  font-variant-numeric: tabular-nums;
+}
+.quoteBreakdownNote {
+  margin-top: 6px;
+  opacity: 0.7;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+/* Scenario parameter editor. */
+.paramEditor {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.paramEditor[disabled] {
+  opacity: 0.6;
+}
+.paramRadios {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.paramRadio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.paramRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.paramRowLabel {
+  flex: 1;
+  font-size: 13px;
+}
+.paramRow input {
+  width: 140px;
+}
+.paramSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(120, 130, 160, 0.18);
+}
+.paramSectionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  opacity: 0.6;
+}
+.paramLock {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+  margin-left: 4px;
+  cursor: help;
+}
+.paramReadonly {
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: rgba(120, 130, 160, 0.1);
+  border: 1px dashed rgba(120, 130, 160, 0.45);
+}
+.paramBanner {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  border: 1px solid rgba(255, 184, 28, 0.55);
+  background: rgba(255, 184, 28, 0.12);
+}
+.paramAmountRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.paramAmountRow input {
+  width: 150px;
+}
+.paramAddon {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* Failure-scenario walkthrough markers in the Scenario Description tab. */
+.scenarioStep.stepSkipped {
+  opacity: 0.45;
+}
+.stepFailTag {
+  color: rgba(200, 60, 30, 0.95);
+  font-weight: 700;
+  font-size: 12px;
+}
+.stepSkipTag {
+  opacity: 0.7;
+  font-size: 12px;
+  font-style: italic;
+}
+.stepFailMsg {
+  color: rgba(150, 50, 20, 0.95);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+/* Raw HTTP detail shown under an expanded event. */
+.httpDetail {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 130, 160, 0.3);
+  background: rgba(120, 130, 160, 0.08);
+}
+.httpLine {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  margin-bottom: 6px;
+}
+.httpMethod {
+  font-weight: 700;
+}
+.httpStatus {
+  opacity: 0.75;
+}
+.httpSection {
+  margin-top: 6px;
+}
+.httpSectionTitle {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  margin-bottom: 2px;
+}
+
 .consentReturn {
   min-height: 100vh;
   display: grid;

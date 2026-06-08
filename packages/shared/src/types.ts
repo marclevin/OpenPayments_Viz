@@ -118,6 +118,10 @@ export type FlowExecutionSpec = {
   }
   // ISO 8601 repeating interval for a recurring outgoing-payment grant, e.g. "R12/<start>/P1M".
   outgoingInterval?: string
+  // Teaching failure injection (web mock only). When set, the mock run stops at `atStep` and emits a
+  // runner.error with `message` instead of that step's success — used by the dedicated failure
+  // scenarios. The real runner ignores this (real failures come from the network).
+  mockFailure?: { atStep: StepId; message: string }
   // Split-payment scenarios fan a single customer payment out to multiple recipients, each with
   // its own incoming-payment, quote, and outgoing-payment. When present, the mock generator emits
   // a branch per recipient instead of the single linear sequence; the shared stages above
@@ -144,6 +148,18 @@ export type SplitRecipient = {
 export type RunId = string
 export type RunnerEventLevel = 'debug' | 'info' | 'warn' | 'error'
 
+// The real HTTP request/response that produced an event. Secrets (Authorization/Signature headers,
+// access tokens in bodies) are redacted before this leaves the runner. On TestNet this is captured
+// live; the web mock synthesizes a representative version. Shown in the event detail's Raw HTTP view.
+export type CapturedHttp = {
+  method: string
+  url: string
+  requestHeaders?: Record<string, string>
+  requestBody?: string
+  status?: number
+  responseBody?: string
+}
+
 export type RunnerEventType =
   | 'run.started'
   | 'run.completed'
@@ -167,6 +183,8 @@ export type RunnerEventBase = {
   type: RunnerEventType
   stepId?: StepId
   level?: RunnerEventLevel
+  // The redacted request/response that produced this event, when available (post-call events only).
+  http?: CapturedHttp
 }
 
 export type RunnerEvent =
@@ -247,6 +265,9 @@ export type RunnerEvent =
       // Web-mock only: which amount is an illustrative FX estimate (the side the quote derives).
       // The real runner omits this — both amounts come straight from the quote.
       approxSide?: 'debit' | 'receive'
+      // When the quote's debitAmount stops being valid (ISO 8601). Real on TestNet; fabricated by
+      // the mock. Optional — older events / some quotes may omit it.
+      expiresAt?: string
     })
   | (RunnerEventBase & {
       type: 'outgoingPayment.created'

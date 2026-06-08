@@ -1,4 +1,5 @@
 import type { RunnerEvent } from '@opviz/shared'
+import type { SpecOverrides } from './scenarioParams'
 
 export type RunnerConfig = {
   keyId: string
@@ -9,6 +10,8 @@ export type RunnerConfig = {
   callbackPort?: number
   scenarioId?: string
   uiBaseUrl?: string
+  // Parameter-editor overrides merged onto the registered spec by the runner.
+  specOverrides?: SpecOverrides
 }
 
 export type StreamStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -19,12 +22,21 @@ export type StreamCallbacks = {
   onDisconnected?: () => void
 }
 
+export type ResolvedWallet = {
+  id: string
+  assetCode: string
+  assetScale: number
+  authServer: string
+  resourceServer: string
+}
+
 export type EventStreamClient = {
   connect: (callbacks: StreamCallbacks) => void
   disconnect: () => void
   startRun: (config: RunnerConfig) => Promise<{ runId?: string }>
   pause: () => Promise<void>
   resume: () => Promise<void>
+  resolveWallet: (url: string) => Promise<ResolvedWallet>
 }
 
 function joinUrl(baseUrl: string, path: string): string {
@@ -107,6 +119,15 @@ export function createRunnerClient(baseUrl: string): EventStreamClient {
     await fetch(joinUrl(baseUrl, '/resume'), { method: 'POST' })
   }
 
-  return { connect, disconnect, startRun, pause, resume }
+  async function resolveWallet(url: string): Promise<ResolvedWallet> {
+    const res = await fetch(joinUrl(baseUrl, `/resolve?url=${encodeURIComponent(url)}`))
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}) as { error?: string })
+      throw new Error(body.error || `Could not resolve wallet (${res.status})`)
+    }
+    return (await res.json()) as ResolvedWallet
+  }
+
+  return { connect, disconnect, startRun, pause, resume, resolveWallet }
 }
 
