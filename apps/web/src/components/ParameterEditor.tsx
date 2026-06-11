@@ -56,7 +56,7 @@ export function ParameterEditor({
         “🔒 not editable” are fixed by the scenario itself or, on TestNet, set by the wallet.
       </p>
       {disabled ? (
-        <div className="paramBanner">Parameters are locked while a run is in progress — stop the run to edit.</div>
+        <div className="paramBanner">Parameters are locked while a run is in progress. Stop the run to edit.</div>
       ) : null}
 
       {/* --- Payment type --- */}
@@ -90,7 +90,7 @@ export function ParameterEditor({
         ) : (
           <ReadOnlyField
             label="Which side is fixed?"
-            value={fixedSend ? 'Fixed send — the sender pays a set amount' : 'Fixed receive — the receiver gets a set amount'}
+            value={fixedSend ? 'Fixed send: the sender pays a set amount' : 'Fixed receive: the receiver gets a set amount'}
             reason={
               caps.split
                 ? 'This split scenario always fixes each recipient’s received amount.'
@@ -181,7 +181,7 @@ export function ParameterEditor({
                   <input type="number" min="0" step="0.0001" value={params.fxRate} onChange={(e) => set({ fxRate: e.target.value })} />
                   <span className="paramAddon">{params.counterpartyAssetCode}</span>
                 </div>
-                <div className="subtleHelp">Used only for the “≈” estimate in Mocked mode — a real run uses the live quote.</div>
+                <div className="subtleHelp">Used only for the “≈” estimate in Mocked mode. A real run uses the live quote.</div>
               </div>
             </>
           )}

@@ -160,7 +160,7 @@ export function humanizeEvent(e: RunnerEvent, _flow: FlowDefinition): EventNarra
       return {
         actor: 'Client',
         actorColorVar: colorFor('Client', 'client'),
-        sentence: 'Client created the Outgoing Payment — a payment instruction; the account-servicing entity settles it',
+        sentence: 'Client created the Outgoing Payment, a payment instruction; the account-servicing entity settles it',
         facts: [{ label: 'Resource', value: resourcePath(e.resourceId), tone: 'code' }],
         keyField: 'resourceId',
         icon: 'create',

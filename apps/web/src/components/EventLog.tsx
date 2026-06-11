@@ -1,8 +1,8 @@
 import { getStepStatusFromEvents, type CapturedHttp, type FlowDefinition, type RunnerEvent, type StepStatus } from '@opviz/shared'
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { RunAmounts } from '../lib/amounts'
-import { highlightEntities } from '../lib/colorMap'
+import { highlightEntities, type EntityColorVar } from '../lib/colorMap'
 import {
   groupEventsIntoBlocks,
   humanizeEvent,
@@ -13,6 +13,7 @@ import {
   type WhyContent,
 } from '../lib/eventNarration'
 import { formatTime, prettyJson } from '../lib/format'
+import { HTTP_ANNOTATIONS } from '../lib/httpAnnotations'
 
 type EventLogProps = {
   events: RunnerEvent[]
@@ -155,34 +156,195 @@ function CuratedJson({ event, keyField }: { event: RunnerEvent; keyField?: strin
   )
 }
 
+// Maps a URL hostname to a human-readable server label and its entity color var.
+function classifyUrl(url: string): { label: string; colorVar: EntityColorVar } {
+  try {
+    const { hostname } = new URL(url)
+    if (/auth\./i.test(hostname)) return { label: 'Auth Server', colorVar: '--entityAuthServer' }
+    if (/ilp\.|resource\./i.test(hostname)) return { label: 'Resource Server', colorVar: '--entityResourceServer' }
+  } catch {
+    // malformed URL — fall through to default
+  }
+  return { label: 'Server', colorVar: '--accent' }
+}
+
+// Renders a parsed JSON value with syntax coloring. Keys get annotation chips when annotate=true.
+function renderValue(value: unknown, depth: number, annotate: boolean): ReactNode {
+  if (value === null) return <span className="jvNull">null</span>
+  if (typeof value === 'boolean') return <span className="jvBool">{String(value)}</span>
+  if (typeof value === 'number') return <span className="jvNum">{value}</span>
+  if (typeof value === 'string') return <span className="jvStr">"{value}"</span>
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="jvNull">[]</span>
+    return (
+      <>
+        {'['}
+        <div className="jvIndent">
+          {value.map((item, i) => (
+            <span key={i} className="jvLine">
+              {renderValue(item, depth + 1, annotate)}
+              {i < value.length - 1 ? ',' : ''}
+            </span>
+          ))}
+        </div>
+        {']'}
+      </>
+    )
+  }
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 0) return <span className="jvNull">{'{}'}</span>
+    return (
+      <>
+        {'{'}
+        <div className="jvIndent">
+          {entries.map(([k, v], i) => (
+            <span key={k} className="jvLine">
+              <span className="jsonKey">"{k}"</span>
+              {annotate && HTTP_ANNOTATIONS[k] ? (
+                <span className="jsonAnnotation" title={HTTP_ANNOTATIONS[k]}>{HTTP_ANNOTATIONS[k]}</span>
+              ) : null}
+              <span className="jsonSep">: </span>
+              {renderValue(v, depth + 1, annotate)}
+              {i < entries.length - 1 ? ',' : ''}
+            </span>
+          ))}
+        </div>
+        {'}'}
+      </>
+    )
+  }
+  return <span>{String(value)}</span>
+}
+
+// Formatted JSON body with syntax coloring, falling back to raw <pre> if parse fails.
+function FormattedJson({ raw, annotate }: { raw: string; annotate: boolean }) {
+  const parsed = useMemo(() => {
+    try { return { ok: true, value: JSON.parse(raw) } } catch { return { ok: false } }
+  }, [raw])
+
+  if (!parsed.ok) return <pre className="rawJson">{raw}</pre>
+  return (
+    <div style={{ fontFamily: 'var(--mono)', fontSize: 12, lineHeight: 1.6 }}>
+      {renderValue(parsed.value, 0, annotate)}
+    </div>
+  )
+}
+
 // The real (TestNet) or synthesized (mock) HTTP behind an event, with secrets already redacted by
-// the runner/mock. Gives students the literal request/response without leaving the timeline.
-function HttpDetail({ http }: { http: CapturedHttp }) {
+// the runner/mock. Structured into server identity → request card → response card.
+function HttpDetail({ http, annotate }: { http: CapturedHttp; annotate: boolean }) {
+  const [showHeaders, setShowHeaders] = useState(false)
   const headers = http.requestHeaders ? Object.entries(http.requestHeaders) : []
+  const server = classifyUrl(http.url)
+  const pathOnly = (() => {
+    try { const u = new URL(http.url); return u.pathname + u.search } catch { return http.url }
+  })()
+  const method = http.method.toLowerCase()
+  const statusClass = typeof http.status === 'number'
+    ? (http.status >= 200 && http.status < 300 ? 'ok' : http.status >= 400 ? 'err' : '')
+    : ''
+
   return (
     <div className="httpDetail">
-      <div className="httpLine">
-        <span className="httpMethod">{http.method}</span> <span className="httpUrl">{http.url}</span>
-        {typeof http.status === 'number' ? <span className="httpStatus"> → {http.status}</span> : null}
+      {/* Zone A: server identity */}
+      <div className="httpServerHeader">
+        <span className="httpServerBadge" style={{ color: `var(${server.colorVar})` }}>
+          {server.label}
+        </span>
+        <span className="httpServerUrl">
+          <span className="httpServerUrlHost">{(() => { try { return new URL(http.url).hostname } catch { return '' } })()}</span>
+          <span className="httpServerUrlPath">{pathOnly.replace(/^[^/]*/, '')}</span>
+        </span>
       </div>
-      {headers.length ? (
-        <div className="httpSection">
-          <div className="httpSectionTitle">Request headers</div>
-          <pre className="rawJson">{headers.map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>
+
+      {/* Zone B: request */}
+      <div className="httpBlock">
+        <div className="httpBlockHead">
+          <span className={`httpMethodBadge ${method}`}>{http.method}</span>
+          <span className="httpBlockPath">{pathOnly}</span>
+          {headers.length > 0 && (
+            <button type="button" className="metaToggle" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}
+              onClick={() => setShowHeaders(v => !v)}>
+              {showHeaders ? 'Hide headers' : `Headers (${headers.length})`}
+            </button>
+          )}
         </div>
-      ) : null}
-      {http.requestBody ? (
-        <div className="httpSection">
-          <div className="httpSectionTitle">Request body</div>
-          <pre className="rawJson">{http.requestBody}</pre>
+        <div className="httpBlockBody">
+          {showHeaders && (
+            <pre className="rawJson" style={{ marginBottom: 8 }}>
+              {headers.map(([k, v]) => `${k}: ${v}`).join('\n')}
+            </pre>
+          )}
+          {http.requestBody
+            ? <FormattedJson raw={http.requestBody} annotate={annotate} />
+            : <span style={{ fontFamily: 'var(--mono)', fontSize: 11, opacity: 0.5 }}>(no body)</span>}
         </div>
-      ) : null}
-      {http.responseBody ? (
-        <div className="httpSection">
-          <div className="httpSectionTitle">Response body</div>
-          <pre className="rawJson">{http.responseBody}</pre>
+      </div>
+
+      {/* Arrow */}
+      {(http.status != null || http.responseBody) && <div className="httpArrow">↓</div>}
+
+      {/* Zone C: response */}
+      {(http.status != null || http.responseBody) && (
+        <div className="httpBlock">
+          <div className="httpBlockHead">
+            {typeof http.status === 'number' && (
+              <span className={`pill statusPill ${statusClass}`} style={{ fontSize: 11 }}>
+                {http.status}
+              </span>
+            )}
+          </div>
+          <div className="httpBlockBody">
+            {http.responseBody
+              ? <FormattedJson raw={http.responseBody} annotate={annotate} />
+              : <span style={{ fontFamily: 'var(--mono)', fontSize: 11, opacity: 0.5 }}>(no body)</span>}
+          </div>
         </div>
-      ) : null}
+      )}
+    </div>
+  )
+}
+
+// Manages tab state for an expanded event row. Extracted so hooks run unconditionally.
+function EventBody({ event, flow, rawMode }: { event: RunnerEvent; flow: FlowDefinition; rawMode: boolean }) {
+  const [tab, setTab] = useState<'event' | 'http'>(() => event.http ? 'http' : 'event')
+  const [annotate, setAnnotate] = useState(false)
+  const n = humanizeEvent(event, flow)
+
+  if (rawMode) {
+    return (
+      <div className="eventBody">
+        <pre className="rawJson">{prettyJson(event)}</pre>
+      </div>
+    )
+  }
+
+  const hasHttp = Boolean(event.http)
+
+  return (
+    <div className="eventBody">
+      {hasHttp && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="eventHttpTabs">
+            <button type="button" className={`eventHttpTab ${tab === 'http' ? 'active' : ''}`}
+              onClick={() => setTab('http')}>HTTP Call</button>
+            <button type="button" className={`eventHttpTab ${tab === 'event' ? 'active' : ''}`}
+              onClick={() => setTab('event')}>Event Details</button>
+          </div>
+          {tab === 'http' && (
+            <button type="button" className="httpAnnotateToggle" onClick={() => setAnnotate(v => !v)}>
+              {annotate ? 'Hide annotations' : 'Annotate fields'}
+            </button>
+          )}
+        </div>
+      )}
+      {(!hasHttp || tab === 'event') && (
+        <CuratedJson event={event} keyField={n.keyField} />
+      )}
+      {hasHttp && tab === 'http' && (
+        <HttpDetail http={event.http!} annotate={annotate} />
+      )}
     </div>
   )
 }
@@ -320,16 +482,7 @@ export function EventLog({ events, flow, onSelectStep, selectedStepId, amounts }
                         </span>
                         <time className="eventTime">{formatTime(e.ts)}</time>
                       </button>
-                      {isOpen && (
-                        <div className="eventBody">
-                          {rawMode ? (
-                            <pre className="rawJson">{prettyJson(e)}</pre>
-                          ) : (
-                            <CuratedJson event={e} keyField={n.keyField} />
-                          )}
-                          {!rawMode && e.http ? <HttpDetail http={e.http} /> : null}
-                        </div>
-                      )}
+                      {isOpen && <EventBody event={e} flow={flow} rawMode={rawMode} />}
                     </li>
                   )
                 })}

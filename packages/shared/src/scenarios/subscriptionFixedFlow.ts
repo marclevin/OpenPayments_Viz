@@ -24,7 +24,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Customer Wallet',
       position: { x: 330, y: 30 },
       description:
-        'The Customer Wallet is the public URL of the subscriber who pays. Fetching it reveals the customer’s Auth Server, Resource Server, and currency ({senderAsset}). This is the account that is debited each month — the converted cost ({debit}) of the {receive} charge.',
+        'The Customer Wallet is the public URL of the subscriber who pays. Fetching it reveals the customer\’s Auth Server, Resource Server, and currency ({senderAsset}). This is the account that is debited each month: the converted cost ({debit}) of the {receive} charge.',
     },
     {
       id: 'spWallet',
@@ -56,7 +56,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Service Provider Auth Server',
       position: { x: 700, y: 360 },
       description:
-        'The Service Provider Auth Server (GNAP) controls permission to act on the provider’s account. It issues the token that lets the Client create an incoming-payment on the provider’s wallet — no human approval needed for receiving money.',
+        'The Service Provider Auth Server (GNAP) controls permission to act on the provider\’s account. It issues the token that lets the Client create an incoming-payment on the provider\’s wallet; no human approval needed for receiving money.',
     },
     {
       id: 'spResource',
@@ -88,7 +88,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Outgoing Payment',
       position: { x: 1060, y: 70 },
       description:
-        'An outgoing-payment is an instruction to the customer’s account-servicing entity (the bank behind the Resource Server) to make a payment — creating it does not move money by itself. It references the quote and the provider’s incoming-payment. This first one is the month-1 instruction; the recurring grant pre-authorizes the next 11. The account-servicing entity settles each transfer out of band.',
+        'An outgoing-payment is an instruction to the customer\’s account-servicing entity (the bank behind the Resource Server) to make a payment; creating it does not move money by itself. It references the quote and the provider\’s incoming-payment. This first one is the month-1 instruction; the recurring grant pre-authorizes the next 11. The account-servicing entity settles each transfer out of band.',
     },
   ],
   edges: [
@@ -160,7 +160,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'Grant (recurring outgoing)',
       stepId: 'sub-grant-outgoing-interactive',
       description:
-        'The Client requests an interactive outgoing-payment grant carrying limits (debitAmount, in the customer’s {senderAsset}) and an interval (R12/…/P1M) — permission to pay the {receive} charge ({debit}) once a month for 12 months. Because it authorizes real payments, the Auth Server returns a consent redirect instead of a token.',
+        'The Client requests an interactive outgoing-payment grant carrying limits (debitAmount, in the customer\’s {senderAsset}) and an interval (R12/…/P1M), permission to pay the {receive} charge ({debit}) once a month for 12 months. Because it authorizes real payments, the Auth Server returns a consent redirect instead of a token.',
     },
     {
       id: 'e-sub-consent',
@@ -170,7 +170,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       label: 'interact.redirect',
       stepId: 'sub-grant-outgoing-interactive',
       description:
-        'The Customer Auth Server returns a redirect URL. The customer opens it and approves the recurring authorization once — this single consent covers all 12 monthly payments.',
+        'The Customer Auth Server returns a redirect URL. The customer opens it and approves the recurring authorization once; this single consent covers all 12 monthly payments.',
     },
     {
       id: 'e-sub-grant-cont',
@@ -217,7 +217,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       target: 'outgoingPayment',
       label: 'creates',
       description:
-        'The outgoing-payment is created and hosted on the Customer’s Resource Server. The Client’s "Create Outgoing Payment" request lands here, and the server records the payment instruction. The customer’s account-servicing entity then performs the actual transfer out of band — debiting {debit} to deliver {receive} to the provider.',
+        'The outgoing-payment is created and hosted on the Customer\’s Resource Server. The Client\’s "Create Outgoing Payment" request lands here, and the server records the payment instruction. The customer\’s account-servicing entity then performs the actual transfer out of band, debiting {debit} to deliver {receive} to the provider.',
     },
   ],
   steps: [
@@ -262,11 +262,11 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'spResource', 'incomingPayment'],
       involvedEdgeIds: ['e-sub-ip', 'e-sub-create-ip'],
       description:
-        'The Client creates the incoming-payment with a fixed incomingAmount of {receive} on the Service Provider\’s Resource Server — guaranteeing the provider receives exactly {receive} this period.',
+        'The Client creates the incoming-payment with a fixed incomingAmount of {receive} on the Service Provider\’s Resource Server, guaranteeing the provider receives exactly {receive} this period.',
       nodeRoles: {
         client: 'The Client presents its token and requests the incoming-payment with incomingAmount {receive}.',
         spResource: 'The Service Provider Resource Server creates the incoming-payment resource.',
-        incomingPayment: 'The incoming-payment is created here — the {receive} destination for this billing period.',
+        incomingPayment: 'The incoming-payment is created here: the {receive} destination for this billing period.',
       },
     },
     {
@@ -277,10 +277,10 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerAuth'],
       involvedEdgeIds: ['e-sub-grant-quote'],
       description:
-        'The Client obtains a non-interactive grant from the Customer\’s Auth Server allowing it to create a quote (pricing only — not spending).',
+        'The Client obtains a non-interactive grant from the Customer\’s Auth Server allowing it to create a quote (pricing only, not spending).',
       nodeRoles: {
         client: 'The Client asks the customer’s bank for permission to create a quote.',
-        customerAuth: 'The Customer\’s Auth Server issues a quote token automatically — pricing needs no consent.',
+        customerAuth: 'The Customer\’s Auth Server issues a quote token automatically; pricing needs no consent.',
       },
     },
     {
@@ -306,7 +306,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerAuth'],
       involvedEdgeIds: ['e-sub-grant-out', 'e-sub-consent'],
       description:
-        'The Client requests an interactive outgoing-payment grant with limits (debitAmount, in {senderAsset}) and an interval of R12/…/P1M — pay the {receive} charge ({debit}) monthly for 12 months. The Customer Auth Server returns a redirect for the customer to consent once.',
+        'The Client requests an interactive outgoing-payment grant with limits (debitAmount, in {senderAsset}) and an interval of R12/…/P1M, authorizing payment of the {receive} charge ({debit}) monthly for 12 months. The Customer Auth Server returns a redirect for the customer to consent once.',
       nodeRoles: {
         client:
           'The Client requests permission to charge the customer the {receive} fee ({debit}) a month for 12 months, sending the limits and interval.',
@@ -340,7 +340,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
       nodeRoles: {
         client: 'The Client uses the recurring token and the quote to create the first month’s outgoing-payment instruction.',
         customerResource: 'The Customer Resource Server records the outgoing-payment instruction; its account-servicing entity carries out the transfer.',
-        outgoingPayment: 'The outgoing-payment instruction is created here — month 1 of 12. The funds leave the Customer Wallet only once the account-servicing entity settles it.',
+        outgoingPayment: 'The outgoing-payment instruction is created here: month 1 of 12. The funds leave the Customer Wallet only once the account-servicing entity settles it.',
       },
     },
     {
@@ -354,7 +354,7 @@ export const subscriptionFixedFlow: FlowDefinition = {
         'No new grants are needed for the remaining 11 months. The recurring grant stays valid, so each month the Client simply repeats three steps: create a new incoming-payment ({receive}), create a quote, and create an outgoing-payment. If a token expires, it can be rotated without re-consent.',
       nodeRoles: {
         client:
-          'Each interval the Client repeats create-incoming-payment, create-quote, and create-outgoing-payment — reusing the same recurring grant.',
+          'Each interval the Client repeats create-incoming-payment, create-quote, and create-outgoing-payment, reusing the same recurring grant.',
         customerWallet: 'A fresh payment is instructed against the Customer Wallet each month automatically, without re-approving; the account-servicing entity settles each one.',
         outgoingPayment: 'A fresh outgoing-payment instruction is created every month for 11 more months.',
         incomingPayment: 'A fresh incoming-payment ({receive} fixed) is created on the provider each month.',

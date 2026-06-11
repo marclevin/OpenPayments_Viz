@@ -57,7 +57,7 @@ export function QuoteBreakdown({ amounts }: { amounts: RunAmounts }) {
           ) : null}
           {!sameCurrency ? (
             <div className="quoteBreakdownNote">
-              The gap is FX + fees combined — Open Payments quotes don’t itemize fees.
+              The gap is FX and fees combined. Open Payments quotes do not itemize fees.
             </div>
           ) : null}
         </div>

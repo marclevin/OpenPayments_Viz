@@ -7,7 +7,7 @@
 // Node kinds: glyph + one-line meaning. Shapes (agent vs resource) are explained in the section
 // note below, matching FlowNode's agentKinds split.
 const NODE_ENTRIES: Array<{ glyph: string; label: string; meaning: string }> = [
-  { glyph: '◻', label: 'Client', meaning: 'The program driving the flow — signs and sends every request.' },
+  { glyph: '◻', label: 'Client', meaning: 'The program driving the flow: it signs and sends every request.' },
   { glyph: '⧉', label: 'Wallet address', meaning: 'A public URL identifying an account; reveals its servers and currency.' },
   { glyph: '⊚', label: 'Auth Server', meaning: 'Grants permission (GNAP) and issues access tokens.' },
   { glyph: '◈', label: 'Resource Server', meaning: "The wallet's API, where resources are created." },
@@ -37,7 +37,7 @@ const STATUS_ENTRIES: Array<{ label: string; color: string; meaning: string }> =
   { label: 'Idle', color: 'rgba(15,23,42,0.18)', meaning: "Hasn't run yet." },
   { label: 'Active', color: 'var(--statusActive)', meaning: 'In progress right now.' },
   { label: 'Success', color: 'var(--statusOk)', meaning: 'Completed successfully.' },
-  { label: 'Error', color: 'var(--statusError)', meaning: 'Failed — check the event log.' },
+  { label: 'Error', color: 'var(--statusError)', meaning: 'Failed. Check the event log.' },
 ]
 
 function EdgeSwatch({ color, dash, arrow }: { color: string; dash?: string; arrow: EdgeArrow }) {

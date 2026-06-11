@@ -25,7 +25,7 @@ function nodeStatusSentence(label: string, status: StepStatus): string {
     case 'success':
       return `${label} has completed its part successfully.`
     case 'error':
-      return `${label} ran into an error — check the event log.`
+      return `${label} ran into an error. Check the event log.`
     default:
       return `${label} hasn’t been involved yet.`
   }
@@ -48,7 +48,7 @@ export function explainNode(
     } else {
       out.push({
         label: `At this step · ${step.title}`,
-        body: `The ${node.label} isn’t involved in this step — it’s used in other steps.`,
+        body: `The ${node.label} is not involved in this step. It is used in other steps.`,
       })
     }
   }
@@ -64,7 +64,7 @@ function edgeStatusSentence(status: StepStatus | undefined): string {
     case 'success':
       return 'This request completed successfully.'
     case 'error':
-      return 'This request failed — check the event log.'
+      return 'This request failed. Check the event log.'
     default:
       return 'This request hasn’t been sent yet.'
   }
@@ -80,7 +80,7 @@ export function explainEdge(
   if (edge.kind === 'creation') {
     out.push({
       label: 'Creation',
-      body: 'This resource is created and hosted on the Resource Server — the arrow points from the server to the resource it produces.',
+      body: 'This resource is created and hosted on the Resource Server. The arrow points from the server to the resource it produces.',
     })
   } else if (edge.kind === 'relation' || !edge.stepId) {
     out.push({
@@ -100,7 +100,7 @@ function stepStatusSentence(status: StepStatus | undefined): string {
     case 'success':
       return 'This step has completed successfully.'
     case 'error':
-      return 'This step has failed — check the event log for details.'
+      return 'This step has failed. Check the event log for details.'
     default:
       return 'This step hasn’t run yet.'
   }

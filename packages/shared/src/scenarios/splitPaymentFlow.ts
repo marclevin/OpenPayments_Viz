@@ -10,7 +10,7 @@ export const splitPaymentFlow: FlowDefinition = {
   id: 'split-payment',
   title: 'Split Payment (one payment, two recipients)',
   description:
-    'A single $100.00 payment from a Customer is split between two recipients who are paid directly: the Merchant receives $90.00 (90%) and the Platform keeps $10.00 (10%) as a marketplace fee. Open Payments only issues instructions, so funds never pass through one party to reach the other — each recipient has its own incoming-payment, the Customer gets a quote for each, and one interactive consent authorizes both outgoing payments.',
+    'A single $100.00 payment from a Customer is split between two recipients who are paid directly: the Merchant receives $90.00 (90%) and the Platform keeps $10.00 (10%) as a marketplace fee. Open Payments only issues instructions, so funds never pass through one party to reach the other; each recipient has its own incoming-payment, the Customer gets a quote for each, and one interactive consent authorizes both outgoing payments.',
   mockOnly: true,
   mockOnlyReason:
     'This scenario involves multiple recipients, the current runner only supports one.',
@@ -29,7 +29,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Customer Wallet',
       position: { x: 320, y: 60 },
       description:
-        'The Customer Wallet is the public URL of the buyer who pays. Fetching it reveals the customer’s Auth Server, Resource Server, and currency. The full $100.00 is debited from this account — split across two outgoing-payments — once the account-servicing entity settles each instruction.',
+        'The Customer Wallet is the public URL of the buyer who pays. Fetching it reveals the customer\’s Auth Server, Resource Server, and currency. The full $100.00 is debited from this account, split across two outgoing-payments, once the account-servicing entity settles each instruction.',
     },
     {
       id: 'customerAuth',
@@ -93,7 +93,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Merchant Auth Server',
       position: { x: 700, y: 360 },
       description:
-        'The Merchant Auth Server (GNAP) issues the token that lets the Client create an incoming-payment on the merchant’s wallet — no human approval needed for receiving money.',
+        'The Merchant Auth Server (GNAP) issues the token that lets the Client create an incoming-payment on the merchant\’s wallet; no human approval needed for receiving money.',
     },
     {
       id: 'merchantResource',
@@ -109,7 +109,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Incoming · Merchant',
       position: { x: 1100, y: 430 },
       description:
-        'An incoming-payment on the Merchant Resource Server with a fixed incomingAmount of $90.00 — the merchant’s share of the purchase.',
+        'An incoming-payment on the Merchant Resource Server with a fixed incomingAmount of $90.00, the merchant\’s share of the purchase.',
     },
     {
       id: 'platformWallet',
@@ -117,7 +117,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Platform Wallet',
       position: { x: 320, y: 700 },
       description:
-        'The Platform Wallet is the public URL of the marketplace operator (you). Fetching it tells the Client where to create the Platform incoming-payment. It receives the $10.00 fee directly — never routed through the merchant.',
+        'The Platform Wallet is the public URL of the marketplace operator (you). Fetching it tells the Client where to create the Platform incoming-payment. It receives the $10.00 fee directly, never routed through the merchant.',
     },
     {
       id: 'platformAuth',
@@ -125,7 +125,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Platform Auth Server',
       position: { x: 700, y: 660 },
       description:
-        'The Platform Auth Server (GNAP) issues the token that lets the Client create an incoming-payment on the platform’s wallet for the fee — again, no consent needed to receive money.',
+        'The Platform Auth Server (GNAP) issues the token that lets the Client create an incoming-payment on the platform\’s wallet for the fee; again, no consent needed to receive money.',
     },
     {
       id: 'platformResource',
@@ -141,7 +141,7 @@ export const splitPaymentFlow: FlowDefinition = {
       label: 'Incoming · Platform',
       position: { x: 1100, y: 730 },
       description:
-        'An incoming-payment on the Platform Resource Server with a fixed incomingAmount of $10.00 — the marketplace fee.',
+        'An incoming-payment on the Platform Resource Server with a fixed incomingAmount of $10.00, the marketplace fee.',
     },
   ],
   edges: [
@@ -200,7 +200,7 @@ export const splitPaymentFlow: FlowDefinition = {
       source: 'merchantResource',
       target: 'merchantIncoming',
       label: 'creates',
-      description: 'The merchant’s incoming-payment ($90.00) is materialised here — the destination for the merchant’s share.',
+      description: 'The merchant\’s incoming-payment ($90.00) is materialised here, the destination for the merchant\’s share.',
     },
 
     // Platform incoming.
@@ -211,7 +211,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'platformAuth',
       label: 'Grant (incoming)',
       stepId: 'split-grant-incoming-platform',
-      description: 'The Client asks the Platform Auth Server for a grant to create the fee incoming-payment. Again non-interactive — receiving money needs no consent.',
+      description: 'The Client asks the Platform Auth Server for a grant to create the fee incoming-payment. Again non-interactive: receiving money needs no consent.',
     },
     {
       id: 'e-sp-ip-p',
@@ -228,7 +228,7 @@ export const splitPaymentFlow: FlowDefinition = {
       source: 'platformResource',
       target: 'platformIncoming',
       label: 'creates',
-      description: 'The platform’s incoming-payment ($10.00) is materialised here — the destination for the marketplace fee.',
+      description: 'The platform\’s incoming-payment ($10.00) is materialised here, the destination for the marketplace fee.',
     },
 
     // Quote grant (one, customer side, reused for both quotes).
@@ -286,7 +286,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'customerAuth',
       label: 'Grant (outgoing, combined)',
       stepId: 'split-grant-outgoing-interactive',
-      description: 'The Client requests one interactive outgoing-payment grant whose debitAmount limit is the combined total ($100.00) — enough to cover both payments. Because money moves, the Auth Server returns a consent redirect instead of a token.',
+      description: 'The Client requests one interactive outgoing-payment grant whose debitAmount limit is the combined total ($100.00), enough to cover both payments. Because money moves, the Auth Server returns a consent redirect instead of a token.',
     },
     {
       id: 'e-sp-consent',
@@ -295,7 +295,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'client',
       label: 'interact.redirect',
       stepId: 'split-grant-outgoing-interactive',
-      description: 'The Customer Auth Server returns a redirect URL. The customer approves once — this single consent authorizes both the $90.00 and the $10.00 outgoing-payments.',
+      description: 'The Customer Auth Server returns a redirect URL. The customer approves once; this single consent authorizes both the $90.00 and the $10.00 outgoing-payments.',
     },
     {
       id: 'e-sp-grant-cont',
@@ -315,7 +315,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'customerResource',
       label: 'Create Outgoing Payment (merchant)',
       stepId: 'split-outgoing-merchant',
-      description: 'Holding the consented token, the Client creates the first outgoing-payment using the merchant quote — the instruction to send $90.00 directly to the merchant. The customer’s account-servicing entity settles it out of band, and only then does the $90.00 leave the Customer Wallet.',
+      description: 'Holding the consented token, the Client creates the first outgoing-payment using the merchant quote, the instruction to send $90.00 directly to the merchant. The customer\’s account-servicing entity settles it out of band, and only then does the $90.00 leave the Customer Wallet.',
     },
     {
       id: 'e-sp-create-op-m',
@@ -323,7 +323,7 @@ export const splitPaymentFlow: FlowDefinition = {
       source: 'customerResource',
       target: 'merchantOutgoing',
       label: 'creates',
-      description: 'The merchant outgoing-payment instruction is materialised here — addressed directly to the merchant’s incoming-payment, never routed through the platform. The account-servicing entity settles the $90.00 transfer afterwards.',
+      description: 'The merchant outgoing-payment instruction is materialised here, addressed directly to the merchant\’s incoming-payment, never routed through the platform. The account-servicing entity settles the $90.00 transfer afterwards.',
     },
     {
       id: 'e-sp-op-p',
@@ -332,7 +332,7 @@ export const splitPaymentFlow: FlowDefinition = {
       target: 'customerResource',
       label: 'Create Outgoing Payment (platform)',
       stepId: 'split-outgoing-platform',
-      description: 'Reusing the same consented token, the Client creates the second outgoing-payment using the platform quote — the instruction to send $10.00 directly to the platform fee. The customer’s account-servicing entity settles it out of band, and only then does the $10.00 leave the Customer Wallet.',
+      description: 'Reusing the same consented token, the Client creates the second outgoing-payment using the platform quote, the instruction to send $10.00 directly to the platform fee. The customer\’s account-servicing entity settles it out of band, and only then does the $10.00 leave the Customer Wallet.',
     },
     {
       id: 'e-sp-create-op-p',
@@ -340,7 +340,7 @@ export const splitPaymentFlow: FlowDefinition = {
       source: 'customerResource',
       target: 'platformOutgoing',
       label: 'creates',
-      description: 'The platform outgoing-payment instruction is materialised here — addressed directly to the platform’s incoming-payment, never routed through the merchant. The account-servicing entity settles the $10.00 fee transfer afterwards.',
+      description: 'The platform outgoing-payment instruction is materialised here, addressed directly to the platform\’s incoming-payment, never routed through the merchant. The account-servicing entity settles the $10.00 fee transfer afterwards.',
     },
   ],
   steps: [
@@ -352,7 +352,7 @@ export const splitPaymentFlow: FlowDefinition = {
       involvedNodeIds: ['client', 'customerWallet', 'merchantWallet', 'platformWallet'],
       involvedEdgeIds: ['e-sp-disc-c', 'e-sp-disc-m', 'e-sp-disc-p'],
       description:
-        'The Client fetches the public details of all three wallets — Customer, Merchant, and Platform — to learn each side’s Auth Server, Resource Server, and currency before doing anything else.',
+        'The Client fetches the public details of all three wallets (Customer, Merchant, and Platform) to learn each side\’s Auth Server, Resource Server, and currency before doing anything else.',
       nodeRoles: {
         client: 'The Client does the lookups: a public GET to each of the three wallet addresses.',
         customerWallet: 'Being looked up now; its details reveal the Customer Auth Server and Resource Server that handle the quotes and payments.',
@@ -380,11 +380,11 @@ export const splitPaymentFlow: FlowDefinition = {
       group: 'Incoming payments',
       involvedNodeIds: ['client', 'merchantResource', 'merchantIncoming'],
       involvedEdgeIds: ['e-sp-ip-m', 'e-sp-create-ip-m'],
-      description: 'The Client creates the incoming-payment with a fixed incomingAmount of $90.00 on the Merchant Resource Server — the merchant’s share.',
+      description: 'The Client creates the incoming-payment with a fixed incomingAmount of $90.00 on the Merchant Resource Server, the merchant\’s share.',
       nodeRoles: {
         client: 'The Client presents its token and requests the incoming-payment with incomingAmount $90.00.',
         merchantResource: 'The Merchant Resource Server creates the incoming-payment resource.',
-        merchantIncoming: 'The incoming-payment is created here — the $90.00 destination for the merchant.',
+        merchantIncoming: 'The incoming-payment is created here: the $90.00 destination for the merchant.',
       },
     },
     {
@@ -407,11 +407,11 @@ export const splitPaymentFlow: FlowDefinition = {
       group: 'Incoming payments',
       involvedNodeIds: ['client', 'platformResource', 'platformIncoming'],
       involvedEdgeIds: ['e-sp-ip-p', 'e-sp-create-ip-p'],
-      description: 'The Client creates the incoming-payment with a fixed incomingAmount of $10.00 on the Platform Resource Server — the marketplace fee.',
+      description: 'The Client creates the incoming-payment with a fixed incomingAmount of $10.00 on the Platform Resource Server, the marketplace fee.',
       nodeRoles: {
         client: 'The Client presents its token and requests the incoming-payment with incomingAmount $10.00.',
         platformResource: 'The Platform Resource Server creates the incoming-payment resource.',
-        platformIncoming: 'The incoming-payment is created here — the $10.00 fee destination for the platform.',
+        platformIncoming: 'The incoming-payment is created here: the $10.00 fee destination for the platform.',
       },
     },
     {
@@ -424,7 +424,7 @@ export const splitPaymentFlow: FlowDefinition = {
       description: 'The Client obtains a single non-interactive grant from the Customer Auth Server allowing it to create quotes. The same token prices both recipients.',
       nodeRoles: {
         client: 'The Client asks the customer’s bank for permission to create quotes.',
-        customerAuth: 'The Customer Auth Server issues a quote token automatically — pricing needs no consent.',
+        customerAuth: 'The Customer Auth Server issues a quote token automatically; pricing needs no consent.',
       },
     },
     {
@@ -462,7 +462,7 @@ export const splitPaymentFlow: FlowDefinition = {
       group: 'Outgoing payments',
       involvedNodeIds: ['client', 'customerAuth'],
       involvedEdgeIds: ['e-sp-grant-out', 'e-sp-consent'],
-      description: 'The Client requests one interactive outgoing-payment grant with a combined debitAmount limit of $100.00 — enough for both payments. The Customer Auth Server returns a redirect for the customer to consent once.',
+      description: 'The Client requests one interactive outgoing-payment grant with a combined debitAmount limit of $100.00, enough for both payments. The Customer Auth Server returns a redirect for the customer to consent once.',
       nodeRoles: {
         client: 'The Client requests permission to send both payments, sending a combined limit of $100.00.',
         customerAuth: 'Because real money will move, the Customer Auth Server won’t auto-approve. It returns a consent redirect; approving it authorizes both outgoing-payments at once.',
@@ -492,7 +492,7 @@ export const splitPaymentFlow: FlowDefinition = {
       nodeRoles: {
         client: 'The Client uses the consented token and the merchant quote to create the merchant outgoing-payment instruction.',
         customerResource: 'The Customer Resource Server records the outgoing-payment instruction; its account-servicing entity performs the actual $90.00 transfer afterwards.',
-        merchantOutgoing: 'The outgoing-payment instruction is created here. The $90.00 leaves the Customer Wallet for the merchant only once the account-servicing entity settles it — not at creation time.',
+        merchantOutgoing: 'The outgoing-payment instruction is created here. The $90.00 leaves the Customer Wallet for the merchant only once the account-servicing entity settles it, not at creation time.',
       },
     },
     {
@@ -502,11 +502,11 @@ export const splitPaymentFlow: FlowDefinition = {
       group: 'Outgoing payments',
       involvedNodeIds: ['client', 'customerResource', 'platformOutgoing'],
       involvedEdgeIds: ['e-sp-op-p', 'e-sp-create-op-p'],
-      description: 'Reusing the same consented token, the Client creates the second outgoing-payment instruction using the platform quote. The customer’s account-servicing entity settles it out of band, so $10.00 arrives directly at the platform’s fee incoming-payment — never routed through the merchant.',
+      description: 'Reusing the same consented token, the Client creates the second outgoing-payment instruction using the platform quote. The customer\’s account-servicing entity settles it out of band, so $10.00 arrives directly at the platform\’s fee incoming-payment, never routed through the merchant.',
       nodeRoles: {
         client: 'The Client uses the same consented token and the platform quote to create the platform outgoing-payment instruction.',
         customerResource: 'The Customer Resource Server records the second outgoing-payment instruction; its account-servicing entity performs the actual $10.00 transfer afterwards.',
-        platformOutgoing: 'The outgoing-payment instruction is created here. The $10.00 fee leaves the Customer Wallet for the platform only once the account-servicing entity settles it — not at creation time.',
+        platformOutgoing: 'The outgoing-payment instruction is created here. The $10.00 fee leaves the Customer Wallet for the platform only once the account-servicing entity settles it, not at creation time.',
       },
     },
   ],

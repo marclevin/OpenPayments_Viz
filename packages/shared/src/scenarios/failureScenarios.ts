@@ -24,7 +24,7 @@ function failureFlow(id: string, title: string, description: string): FlowDefini
     title,
     description,
     mockOnly: true,
-    mockOnlyReason: 'A teaching failure scenario — available in Mocked mode only.',
+    mockOnlyReason: 'A teaching failure scenario, available in Mocked mode only.',
   }
 }
 
@@ -58,7 +58,7 @@ export const failureScenarios: FailureScenario[] = [
     flow: failureFlow(
       'fail-consent-denied',
       'Failure: consent denied',
-      'Everything is set up and the Client asks the sender to approve the payment — but the sender declines (or the consent window times out). Without approval the grant can’t be continued, so no outgoing payment is created.'
+      'Everything is set up and the Client asks the sender to approve the payment, but the sender declines (or the consent window times out). Without approval the grant cannot be continued, so no outgoing payment is created.'
     ),
     spec: {
       scenarioId: 'fail-consent-denied',

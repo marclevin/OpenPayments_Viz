@@ -871,7 +871,7 @@ function AppInner() {
       setOpenSections((s) => ({ ...s, credentials: s.credentials || credMissing, addresses: s.addresses || !credMissing }))
       showToast(
         'TestNet setup needed',
-        `Running on the Interledger TestNet needs your credentials and wallet addresses. Fill them in under the Configuration tab — still missing: ${missing.join(', ')}.`
+        `Running on the Interledger TestNet needs your credentials and wallet addresses. Fill them in under the Configuration tab. Still missing: ${missing.join(', ')}.`
       )
       appendEvent({
         id: crypto.randomUUID(),
@@ -1275,7 +1275,7 @@ function AppInner() {
                             else setScenarioName('')
                           }}
                         >
-                          <option value="">(new — unsaved)</option>
+                          <option value="">(new, unsaved)</option>
                           {savedScenarios.map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.name}
@@ -1347,10 +1347,10 @@ function AppInner() {
                     </div>
                     <div className="hint">
                       We need the full path to your private key (the <span className="mono">.key</span>{' '}
-                      file) on this computer — the <strong>absolute path</strong>.
+                      file) on this computer (the <strong>absolute path</strong>).
                       <br />
-                       <strong>Windows</strong> — Shift + right-click the file →
-                      “Copy as path”. <strong><br/>macOS</strong> — right-click, then hold Option →
+                       <strong>Windows</strong>: Shift + right-click the file →
+                      “Copy as path”. <strong><br/>macOS</strong>: right-click, then hold Option →
                       “Copy … as Pathname”.
                     </div>
                   </CollapsibleCard>
