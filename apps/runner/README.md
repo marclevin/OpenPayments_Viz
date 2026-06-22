@@ -1,6 +1,6 @@
 # @opviz/runner
 
-Local Node service that executes the Open Payments flow (mirrors `example.js`) and streams structured events over **SSE** for the UI.
+Local Node service that executes the Open Payments flow and streams structured events over **SSE** for the UI.
 
 ## Endpoints
 

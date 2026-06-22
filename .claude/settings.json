@@ -3,7 +3,6 @@
     "allow": [
       "Bash(curl -s http://localhost:5179/src/main.tsx -o /dev/null -w \"main.tsx: %{http_code}\\\\n\")",
       "Bash(curl -s \"http://localhost:5179/src/components/FlowNode.tsx\" -o /dev/null -w \"FlowNode.tsx: %{http_code}\\\\n\")",
-      "Bash(curl -s \"http://localhost:5179/@fs/c:/Users/marcl/OneDrive/Desktop/Code/OpenPayments_Viz/apps/web/src/App.tsx\" -o /dev/null -w \"probe done\\\\n\")",
       "Bash(kill %1)",
       "Bash(pkill -f \"vite --port 5179\")",
       "Bash(node -e \"console.log\\('node', process.version\\)\")",
@@ -32,9 +31,6 @@
       "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3344,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; '\\\\''stopped'\\\\''')",
       "Bash(echo \"EXIT:$?\")",
       "Bash(npx --yes tsx -e ' *)",
-      "Bash(npx --yes tsx __verify_split.mts)",
-      "Bash(npx --yes tsx __verify_split2.mts)",
-      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\marcl\\\\OneDrive\\\\Desktop\\\\Code\\\\OpenPayments_Viz\" -Recurse -Depth 2 | Where-Object {$_.PSIsContainer} | Select-Object -ExpandProperty FullName)",
       "Bash(git ls-files *)",
       "Bash(grep -rl \"test\\\\|vitest\\\\|jest\" apps/web/package.json apps/runner/package.json)",
       "Bash(npx tsx *)"
